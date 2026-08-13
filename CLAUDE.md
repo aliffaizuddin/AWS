@@ -30,6 +30,14 @@ Per `architecture.md` §11:
    chaos test
 5. (Stretch) Function runner triggered by S3 events
 
+## Conventions
+
+- **Commits:** [Conventional Commits](https://www.conventionalcommits.org/)
+  — `<type>(optional scope): <description>`, types `feat|fix|docs|refactor|perf|test|build|ci|chore`.
+- **Branches:** `<type>/<short-kebab-description>`, same type
+  vocabulary as commits.
+- Full rationale: [`docs/decisions/0012-commit-and-branch-conventions.md`](docs/decisions/0012-commit-and-branch-conventions.md).
+
 ## AI-assisted session artifacts
 
 Design docs and implementation plans produced by AI-assisted sessions
