@@ -18,10 +18,10 @@ func TestWriteS3Error_NoSuchBucket(t *testing.T) {
 	assert.Equal(t, "application/xml", rec.Header().Get("Content-Type"))
 
 	var body struct {
-		XMLName xml.Name `xml:"Error"`
-		Code    string   `xml:"Code"`
-		Message string   `xml:"Message"`
-		Resource string  `xml:"Resource"`
+		XMLName  xml.Name `xml:"Error"`
+		Code     string   `xml:"Code"`
+		Message  string   `xml:"Message"`
+		Resource string   `xml:"Resource"`
 	}
 	require.NoError(t, xml.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Equal(t, "NoSuchBucket", body.Code)

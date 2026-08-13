@@ -26,9 +26,9 @@ func WriteXML(w http.ResponseWriter, statusCode int, v any) {
 
 // ListAllMyBucketsResult is the XML body for the ListBuckets operation.
 type ListAllMyBucketsResult struct {
-	XMLName xml.Name    `xml:"ListAllMyBucketsResult"`
-	Owner   Owner       `xml:"Owner"`
-	Buckets BucketsXML  `xml:"Buckets"`
+	XMLName xml.Name   `xml:"ListAllMyBucketsResult"`
+	Owner   Owner      `xml:"Owner"`
+	Buckets BucketsXML `xml:"Buckets"`
 }
 
 type Owner struct {

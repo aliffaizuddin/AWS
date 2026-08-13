@@ -38,14 +38,23 @@ func (d *DiskStore) Put(ctx context.Context, id uuid.UUID, r io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("storage: create tmp %s: %w", id, err)
 	}
-	defer f.Close()
 	if _, err := io.Copy(f, r); err != nil {
 		f.Close()
 		// Clean up the temp file on write failure to avoid leaving partial files.
 		os.Remove(tmpPath)
 		return fmt.Errorf("storage: write %s: %w", id, err)
 	}
-	f.Close()
+	// Flush to disk before closing and renaming, so a crash between the
+	// write and the rename can't leave a renamed-but-not-flushed file.
+	if err := f.Sync(); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("storage: sync %s: %w", id, err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("storage: close tmp %s: %w", id, err)
+	}
 	// Atomically move the temp file to the final path.
 	if err := os.Rename(tmpPath, d.path(id)); err != nil {
 		os.Remove(tmpPath)
