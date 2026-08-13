@@ -31,13 +31,25 @@ func (d *DiskStore) path(id uuid.UUID) string {
 }
 
 func (d *DiskStore) Put(ctx context.Context, id uuid.UUID, r io.Reader) error {
-	f, err := os.Create(d.path(id))
+	// Write to a temporary file first, then rename atomically to the final path.
+	// This ensures that Get/Delete never observe a partial or corrupted file.
+	tmpPath := d.path(id) + ".tmp"
+	f, err := os.Create(tmpPath)
 	if err != nil {
-		return fmt.Errorf("storage: create %s: %w", id, err)
+		return fmt.Errorf("storage: create tmp %s: %w", id, err)
 	}
 	defer f.Close()
 	if _, err := io.Copy(f, r); err != nil {
+		f.Close()
+		// Clean up the temp file on write failure to avoid leaving partial files.
+		os.Remove(tmpPath)
 		return fmt.Errorf("storage: write %s: %w", id, err)
+	}
+	f.Close()
+	// Atomically move the temp file to the final path.
+	if err := os.Rename(tmpPath, d.path(id)); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("storage: rename %s: %w", id, err)
 	}
 	return nil
 }
