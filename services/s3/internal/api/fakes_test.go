@@ -1,10 +1,14 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"sort"
 
 	"github.com/aliffaizuddin/AWS/services/s3/internal/metadata"
+	"github.com/aliffaizuddin/AWS/services/s3/internal/storage"
+	"github.com/google/uuid"
 )
 
 type fakeBucketRepo struct {
@@ -66,4 +70,62 @@ func (f *fakeObjectLister) add(bucket string, obj metadata.Object) {
 
 func (f *fakeObjectLister) ListByBucket(ctx context.Context, bucket string) ([]metadata.Object, error) {
 	return f.objects[bucket], nil
+}
+
+type fakeObjectRepo struct {
+	objects map[string]metadata.Object // key: bucket+"/"+key
+}
+
+func newFakeObjectRepo() *fakeObjectRepo {
+	return &fakeObjectRepo{objects: map[string]metadata.Object{}}
+}
+
+func (f *fakeObjectRepo) key(bucket, key string) string { return bucket + "/" + key }
+
+func (f *fakeObjectRepo) Put(ctx context.Context, obj metadata.Object) error {
+	f.objects[f.key(obj.BucketName, obj.Key)] = obj
+	return nil
+}
+
+func (f *fakeObjectRepo) Get(ctx context.Context, bucket, key string) (*metadata.Object, error) {
+	o, ok := f.objects[f.key(bucket, key)]
+	if !ok {
+		return nil, metadata.ErrObjectNotFound
+	}
+	return &o, nil
+}
+
+func (f *fakeObjectRepo) Delete(ctx context.Context, bucket, key string) error {
+	delete(f.objects, f.key(bucket, key))
+	return nil
+}
+
+type fakeStore struct {
+	blobs map[string][]byte
+}
+
+func newFakeStore() *fakeStore {
+	return &fakeStore{blobs: map[string][]byte{}}
+}
+
+func (f *fakeStore) Put(ctx context.Context, id uuid.UUID, r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	f.blobs[id.String()] = b
+	return nil
+}
+
+func (f *fakeStore) Get(ctx context.Context, id uuid.UUID) (io.ReadCloser, error) {
+	b, ok := f.blobs[id.String()]
+	if !ok {
+		return nil, storage.ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(b)), nil
+}
+
+func (f *fakeStore) Delete(ctx context.Context, id uuid.UUID) error {
+	delete(f.blobs, id.String())
+	return nil
 }
