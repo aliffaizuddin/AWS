@@ -27,19 +27,23 @@ agentic coding session) as context before writing code.
 
 ## 3. Key decisions
 
-| Decision | Choice | Why |
+Full rationale, consequences, and alternatives considered for each
+decision below live in [`docs/decisions/`](decisions/) as individual
+ADRs — this table is a summary index, not the source of truth.
+
+| Decision | Choice | ADR |
 |---|---|---|
-| Virtualization | **Bare-metal k3s**, no Proxmox | VMs cost 2-3GB RAM in overhead before workloads even start; adds a debugging layer (VM vs app issue) that provides no resume value for this project's goals. Multi-VM "multi-node" on one physical box is also partly theater — real node-level fault isolation needs real separate hardware. |
-| Backend language | **Go** (S3, IAM, function runner) | Matches the language of the ecosystem being operated (k8s, Docker, Prometheus, ArgoCD, Terraform providers). Native concurrency fits multipart uploads and policy-check request handling. Static binaries → tiny images, which matters on constrained storage/RAM. |
-| Function runner guest language | Python (stretch) | Realistic polyglot Lambda-style runtime; legitimate reason to touch Python without making it the primary language. |
-| Frontend | React | Lighter fit for a small admin console (buckets, policies, invocation logs) than Angular's more enterprise-scale opinionated structure. Framework choice isn't the signal here — backend/infra is. |
-| Database | PostgreSQL | Backs S3 object metadata index + IAM users/roles/policy documents. |
-| Deployment manifests | **Helm** (umbrella chart + per-service subcharts) | More resume-standard than raw YAML; solves real dev/prod values-override problem. |
-| GitOps | ArgoCD | Git-commit-triggered sync into the cluster; matches how real platform teams operate. |
-| CI/CD | GitHub Actions, path-triggered per service | Avoids rebuilding/redeploying every service on every commit. |
-| Observability | **Prometheus + Grafana + Loki** (PLG stack), not ELK | ELK's minimum realistic footprint (Elasticsearch JVM heap + Logstash + Kibana) is ~5-7GB — 50-70% of the entire workload budget on this hardware. PLG stack is ~1-1.5GB combined and is the more standard choice in k8s-native shops specifically. Documented trade-off, not a default. |
-| Secrets | Sealed Secrets (Vault later, optional) | Keeps secrets out of plaintext values.yaml/manifests. |
-| Repo structure | Monorepo | One coherent system to walk through in interviews; simpler CI wiring via path triggers. |
+| Virtualization | **Bare-metal k3s**, no Proxmox | [0001](decisions/0001-bare-metal-k3s.md) |
+| Backend language | **Go** (S3, IAM, function runner) | [0002](decisions/0002-go-backend-language.md) |
+| Function runner guest language | Python (stretch) | [0003](decisions/0003-python-function-runner-guest-language.md) |
+| Frontend | React | [0004](decisions/0004-react-frontend.md) |
+| Database | PostgreSQL | [0005](decisions/0005-postgresql-database.md) |
+| Deployment manifests | **Helm** (umbrella chart + per-service subcharts) | [0006](decisions/0006-helm-deployment-manifests.md) |
+| GitOps | ArgoCD | [0007](decisions/0007-argocd-gitops.md) |
+| CI/CD | GitHub Actions, path-triggered per service | [0008](decisions/0008-github-actions-cicd.md) |
+| Observability | **Prometheus + Grafana + Loki** (PLG stack), not ELK | [0009](decisions/0009-plg-observability-stack.md) |
+| Secrets | Sealed Secrets (Vault later, optional) | [0010](decisions/0010-sealed-secrets.md) |
+| Repo structure | Monorepo | [0011](decisions/0011-monorepo-structure.md) |
 
 ## 4. Storage layout
 
@@ -154,7 +158,13 @@ cloudlite/
 │   └── argocd/applications/
 ├── .github/workflows/    # ci-s3.yml, ci-iam.yml, ci-fnrunner.yml, ci-web.yml (path-triggered)
 ├── docker-compose.yml    # local dev loop, no k8s
-├── docs/                 # this file + future-work.md
+├── docs/
+│   ├── architecture.md   # this file
+│   ├── future-work.md    # explicit scope fence
+│   ├── decisions/        # one ADR per major decision (§3)
+│   ├── services/         # one file per service — scope + status
+│   └── superpowers/       # AI-session design docs (specs/) and plans (plans/)
+├── CLAUDE.md
 └── README.md
 ```
 
