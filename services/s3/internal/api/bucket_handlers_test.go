@@ -44,6 +44,23 @@ func TestBucketHandlers_Create_Duplicate(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, rec.Code)
 }
 
+func TestBucketHandlers_Create_RejectsReservedAndEmptyNames(t *testing.T) {
+	for _, name := range []string{"healthz", ""} {
+		buckets := newFakeBucketRepo()
+		h := api.BucketHandlers{Buckets: buckets, Objects: newFakeObjectLister()}
+
+		req := httptest.NewRequest(http.MethodPut, "/"+name, nil)
+		req.SetPathValue("bucket", name)
+		rec := httptest.NewRecorder()
+
+		h.Create(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code, "name=%q", name)
+		_, err := buckets.Get(context.Background(), name)
+		assert.Error(t, err, "name=%q should not have been created", name)
+	}
+}
+
 func TestBucketHandlers_List(t *testing.T) {
 	buckets := newFakeBucketRepo()
 	require.NoError(t, buckets.Create(context.Background(), "a"))

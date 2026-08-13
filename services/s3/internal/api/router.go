@@ -29,13 +29,20 @@ func NewRouter(bucketH *BucketHandlers, objectH *ObjectHandlers, healthz http.Ha
 			bucketH.Head(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		WriteS3Error(w, ErrMethodNotAllowed, r.PathValue("bucket"))
 	})
 
 	mux.HandleFunc("PUT /{bucket}/{key...}", objectH.Put)
 	mux.HandleFunc("GET /{bucket}/{key...}", objectH.Get)
 	mux.HandleFunc("HEAD /{bucket}/{key...}", objectH.Head)
 	mux.HandleFunc("DELETE /{bucket}/{key...}", objectH.Delete)
+
+	// Catch-all for anything not matched by any pattern above, so every
+	// unmatched request still gets an AWS-shaped XML error body instead of
+	// net/http's default plain-text 404.
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		WriteS3Error(w, ErrGenericNotFound, r.URL.Path)
+	})
 
 	return mux
 }

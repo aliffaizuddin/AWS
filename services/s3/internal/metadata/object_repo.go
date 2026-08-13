@@ -68,6 +68,18 @@ func (r *ObjectRepo) Delete(ctx context.Context, bucket, key string) error {
 	return nil
 }
 
+// HasObjects reports whether bucket has at least one object row, without
+// pulling every row over the wire — used by bucket deletion's emptiness
+// check, which only needs existence, not the full listing.
+func (r *ObjectRepo) HasObjects(ctx context.Context, bucket string) (bool, error) {
+	var exists bool
+	err := r.db.GetContext(ctx, &exists, `SELECT EXISTS (SELECT 1 FROM objects WHERE bucket_name = $1)`, bucket)
+	if err != nil {
+		return false, fmt.Errorf("metadata: check objects exist in %s: %w", bucket, err)
+	}
+	return exists, nil
+}
+
 func (r *ObjectRepo) ListByBucket(ctx context.Context, bucket string) ([]Object, error) {
 	var objs []Object
 	err := r.db.SelectContext(ctx, &objs, `

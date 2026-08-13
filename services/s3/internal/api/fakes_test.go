@@ -68,8 +68,8 @@ func (f *fakeObjectLister) add(bucket string, obj metadata.Object) {
 	f.objects[bucket] = append(f.objects[bucket], obj)
 }
 
-func (f *fakeObjectLister) ListByBucket(ctx context.Context, bucket string) ([]metadata.Object, error) {
-	return f.objects[bucket], nil
+func (f *fakeObjectLister) HasObjects(ctx context.Context, bucket string) (bool, error) {
+	return len(f.objects[bucket]) > 0, nil
 }
 
 type fakeObjectRepo struct {

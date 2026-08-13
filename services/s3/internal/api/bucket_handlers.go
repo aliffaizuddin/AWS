@@ -21,7 +21,7 @@ type BucketRepo interface {
 // ObjectLister is the subset of metadata.ObjectRepo's methods the bucket
 // handlers need (only to check emptiness before a bucket delete).
 type ObjectLister interface {
-	ListByBucket(ctx context.Context, bucket string) ([]metadata.Object, error)
+	HasObjects(ctx context.Context, bucket string) (bool, error)
 }
 
 type BucketHandlers struct {
@@ -31,13 +31,25 @@ type BucketHandlers struct {
 
 func (h *BucketHandlers) Create(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("bucket")
+
+	// Narrow, deliberate slice of bucket-name validation: reject the empty
+	// string and the "healthz" name specifically, since a bucket literally
+	// named "healthz" would collide with the /healthz route (the literal
+	// path pattern takes precedence over the "/{bucket}" wildcard for HEAD
+	// requests to that exact path). Full AWS bucket-naming rules (length,
+	// DNS-safe charset, etc.) are a separate, later decision.
+	if name == "" || name == "healthz" {
+		WriteS3Error(w, ErrInvalidBucketName, name)
+		return
+	}
+
 	err := h.Buckets.Create(r.Context(), name)
 	if errors.Is(err, metadata.ErrBucketAlreadyExists) {
 		WriteS3Error(w, ErrBucketAlreadyExists, name)
 		return
 	}
 	if err != nil {
-		WriteS3Error(w, S3Error{Code: "InternalError", Message: err.Error()}, name)
+		writeInternalError(w, name, err)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
@@ -46,7 +58,7 @@ func (h *BucketHandlers) Create(w http.ResponseWriter, r *http.Request) {
 func (h *BucketHandlers) List(w http.ResponseWriter, r *http.Request) {
 	buckets, err := h.Buckets.List(r.Context())
 	if err != nil {
-		WriteS3Error(w, S3Error{Code: "InternalError", Message: err.Error()}, "")
+		writeInternalError(w, "", err)
 		return
 	}
 	WriteXML(w, http.StatusOK, NewListAllMyBucketsResult(buckets))
@@ -69,12 +81,12 @@ func (h *BucketHandlers) Head(w http.ResponseWriter, r *http.Request) {
 func (h *BucketHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("bucket")
 
-	objs, err := h.Objects.ListByBucket(r.Context(), name)
+	hasObjects, err := h.Objects.HasObjects(r.Context(), name)
 	if err != nil {
-		WriteS3Error(w, S3Error{Code: "InternalError", Message: err.Error()}, name)
+		writeInternalError(w, name, err)
 		return
 	}
-	if len(objs) > 0 {
+	if hasObjects {
 		WriteS3Error(w, ErrBucketNotEmpty, name)
 		return
 	}
@@ -85,7 +97,7 @@ func (h *BucketHandlers) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		WriteS3Error(w, S3Error{Code: "InternalError", Message: err.Error()}, name)
+		writeInternalError(w, name, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
