@@ -5,9 +5,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aliffaizuddin/AWS/services/s3/internal/api"
+	"github.com/aliffaizuddin/AWS/services/s3/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +37,56 @@ func TestObjectHandlers_Put_Get_RoundTrip(t *testing.T) {
 	assert.Equal(t, http.StatusOK, getRec.Code)
 	assert.Equal(t, "text/plain", getRec.Header().Get("Content-Type"))
 	assert.Equal(t, "hello", getRec.Body.String())
+}
+
+func TestObjectHandlers_Put_Overwrite_DeletesOldBlob(t *testing.T) {
+	buckets := newFakeBucketRepo()
+	require.NoError(t, buckets.Create(context.Background(), "b"))
+	objects := newFakeObjectRepo()
+	store := newFakeStore()
+	h := api.ObjectHandlers{Buckets: buckets, Objects: objects, Store: store}
+
+	firstReq := httptest.NewRequest(http.MethodPut, "/b/k.txt", bytes.NewReader([]byte("first")))
+	firstReq.SetPathValue("bucket", "b")
+	firstReq.SetPathValue("key", "k.txt")
+	h.Put(httptest.NewRecorder(), firstReq)
+
+	firstObj, err := objects.Get(context.Background(), "b", "k.txt")
+	require.NoError(t, err)
+	oldStorageID := firstObj.StorageID
+
+	secondReq := httptest.NewRequest(http.MethodPut, "/b/k.txt", bytes.NewReader([]byte("second, longer body")))
+	secondReq.SetPathValue("bucket", "b")
+	secondReq.SetPathValue("key", "k.txt")
+	rec := httptest.NewRecorder()
+	h.Put(rec, secondReq)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	secondObj, err := objects.Get(context.Background(), "b", "k.txt")
+	require.NoError(t, err)
+	assert.NotEqual(t, oldStorageID, secondObj.StorageID)
+
+	// The old blob must be gone (superseded); the new one must be present.
+	_, err = store.Get(context.Background(), oldStorageID)
+	assert.ErrorIs(t, err, storage.ErrNotFound)
+	_, err = store.Get(context.Background(), secondObj.StorageID)
+	assert.NoError(t, err)
+}
+
+func TestObjectHandlers_Put_ETagIsQuoted(t *testing.T) {
+	buckets := newFakeBucketRepo()
+	require.NoError(t, buckets.Create(context.Background(), "b"))
+	h := api.ObjectHandlers{Buckets: buckets, Objects: newFakeObjectRepo(), Store: newFakeStore()}
+
+	req := httptest.NewRequest(http.MethodPut, "/b/k.txt", bytes.NewReader([]byte("hello")))
+	req.SetPathValue("bucket", "b")
+	req.SetPathValue("key", "k.txt")
+	rec := httptest.NewRecorder()
+	h.Put(rec, req)
+
+	etag := rec.Header().Get("ETag")
+	require.Len(t, etag, 34) // 32 hex chars + 2 surrounding quotes
+	assert.True(t, strings.HasPrefix(etag, `"`) && strings.HasSuffix(etag, `"`))
 }
 
 func TestObjectHandlers_Put_MissingBucket(t *testing.T) {
