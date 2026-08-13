@@ -62,6 +62,22 @@ func TestS3Service_EndToEnd(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
+	// Healthz, through the real router: confirms "GET /healthz" is still
+	// reachable and isn't swallowed by the method-agnostic "/{bucket}"
+	// dispatcher registered for the bucket HEAD route.
+	resp, err = client.Get(srv.URL + "/healthz")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
+	// Head bucket, through the real router: confirms a HEAD request to
+	// "/{bucket}" reaches bucketH.Head via the method-agnostic dispatcher.
+	req, _ = http.NewRequest(http.MethodHead, srv.URL+"/e2e-bucket", nil)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+
 	// Put object.
 	req, _ = http.NewRequest(http.MethodPut, srv.URL+"/e2e-bucket/hello.txt", strings.NewReader("hello world"))
 	req.Header.Set("Content-Type", "text/plain")
