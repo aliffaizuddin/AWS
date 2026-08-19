@@ -14,6 +14,14 @@ of scope-creeping").
 - Server-side encryption
 - Event notifications beyond the single "object-created → function runner" trigger
 
+- Full AWS-style bucket-name validation (DNS-safe charset, 3-63 character
+  length limits, etc.). The Phase 1 design spec
+  (`docs/superpowers/specs/2026-08-13-s3-clone-phase1-design.md` §11) flagged
+  this as an open item and recommended enforcing it from the start; the
+  implementation currently only rejects the empty string and the reserved
+  name `healthz`. Deferred, not forgotten — cheap to add later, but not
+  needed for internal ad-hoc testing.
+
 ## IAM clone — out of scope
 - Cross-account roles / assume-role chains
 - MFA, SSO / federation
@@ -53,3 +61,6 @@ Reasons to actually pick one of these back up later:
 - **Targeting a job posting that explicitly lists ELK** → swap Loki for Filebeat +
   Elasticsearch + Kibana (see architecture.md §13 for sizing)
 - **Targeting a job posting that explicitly lists Vault** → replace Sealed Secrets
+- **Before wiring in the real `aws` CLI / SDKs against this service for anything
+  beyond ad-hoc testing** → enforce full AWS-style bucket-name validation
+  (DNS-safe charset, 3-63 chars)
