@@ -35,7 +35,7 @@ public class DiskBlobStore implements BlobStore {
     @Override
     public void put(UUID id, InputStream in) {
         Path finalPath = pathFor(id);
-        Path tmpPath = dataDir.resolve(id + ".tmp");
+        Path tmpPath = dataDir.resolve(id + "." + java.util.UUID.randomUUID() + ".tmp");
         try (FileChannel channel = FileChannel.open(tmpPath,
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
             in.transferTo(Channels.newOutputStream(channel));
