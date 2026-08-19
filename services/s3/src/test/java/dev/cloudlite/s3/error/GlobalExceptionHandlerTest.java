@@ -5,7 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
@@ -53,6 +56,27 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
         assertThat(response.getBody().getCode()).isEqualTo("MethodNotAllowed");
+    }
+
+    @Test
+    void malformedRequestBodyIsRenderedAs400NotA500() {
+        HttpMessageNotReadableException ex = new HttpMessageNotReadableException("could not read request body");
+
+        ResponseEntity<S3ErrorResponse> response = handler.handleMessageNotReadable(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().getCode()).isEqualTo("InvalidArgument");
+    }
+
+    @Test
+    void unsupportedMediaTypeIsRenderedAs400NotA500() {
+        HttpMediaTypeNotSupportedException ex =
+            new HttpMediaTypeNotSupportedException(MediaType.APPLICATION_XML, java.util.List.of(MediaType.APPLICATION_JSON));
+
+        ResponseEntity<S3ErrorResponse> response = handler.handleMediaTypeNotSupported(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().getCode()).isEqualTo("InvalidArgument");
     }
 
     @Test

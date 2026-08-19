@@ -5,6 +5,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +30,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<S3ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         return errorResponse(S3ErrorCode.METHOD_NOT_ALLOWED, "");
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<S3ErrorResponse> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.debug("s3: malformed request body", ex);
+        return errorResponse(S3ErrorCode.INVALID_ARGUMENT, "");
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<S3ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
+        log.debug("s3: unsupported media type", ex);
+        return errorResponse(S3ErrorCode.INVALID_ARGUMENT, "");
     }
 
     @ExceptionHandler(Exception.class)

@@ -11,6 +11,7 @@ public enum S3ErrorCode {
     METHOD_NOT_ALLOWED("MethodNotAllowed", HttpStatus.METHOD_NOT_ALLOWED, "The specified method is not allowed against this resource"),
     NOT_FOUND("NotFound", HttpStatus.NOT_FOUND, "The specified resource does not exist"),
     ENTITY_TOO_LARGE("EntityTooLarge", HttpStatus.BAD_REQUEST, "Your proposed upload exceeds the maximum allowed size"),
+    INVALID_ARGUMENT("InvalidArgument", HttpStatus.BAD_REQUEST, "Invalid Argument"),
     INTERNAL_ERROR("InternalError", HttpStatus.INTERNAL_SERVER_ERROR, "We encountered an internal error. Please try again.");
 
     private final String code;
