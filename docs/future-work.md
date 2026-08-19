@@ -34,10 +34,22 @@ of scope-creeping").
   `architecture.md` §13 for the hardware tier that would make this viable later
 - 3-node HA clustering for any stateful component (Postgres, Elasticsearch, etc.)
 
+## Language strategy — out of scope for now
+
+- S3 and IAM are Java (existing strength, faster system-design iteration than learning
+  a language simultaneously). Function runner is Go (JVM cold-start is a poor fit for
+  per-invocation execution regardless of RAM).
+- Not doing now: porting S3/IAM to Go. Not needed — the SRE/platform story lives in
+  the infra layer (k3s, Helm, ArgoCD, observability), which is language-agnostic.
+- **Future new services default to Go**, once RAM headroom (post-upgrade or
+  post-second-node) stops making the JVM tax a real constraint. This gives a natural
+  "v1 constrained, v2 expanded" narrative rather than a static one-shot project.
+
 ## Revisit triggers
 
 Reasons to actually pick one of these back up later:
 - **Second physical machine acquired** → real multi-node k3s becomes worth doing
+- **RAM upgrade or second node lands** → start writing new services in Go instead of Java
 - **Targeting a job posting that explicitly lists ELK** → swap Loki for Filebeat +
   Elasticsearch + Kibana (see architecture.md §13 for sizing)
 - **Targeting a job posting that explicitly lists Vault** → replace Sealed Secrets
