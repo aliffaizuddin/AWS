@@ -22,13 +22,14 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ObjectController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import(GlobalExceptionHandler.class)
 class ObjectControllerTest {
 
@@ -43,7 +44,7 @@ class ObjectControllerTest {
         given(objectService.maxObjectSize()).willReturn(100L * 1024 * 1024);
         given(objectService.put(eq("photos"), eq("cat.png"), any(), eq("image/png"))).willReturn("abc123");
 
-        mockMvc.perform(put("/photos/cat.png").contentType(MediaType.IMAGE_PNG).content("hi".getBytes()))
+        mockMvc.perform(put("/photos/cat.png").header("Content-Type", "image/png").content("hi".getBytes()))
             .andExpect(status().isOk())
             .andExpect(header().string("ETag", "\"abc123\""));
     }

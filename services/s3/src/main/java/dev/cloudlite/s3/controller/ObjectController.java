@@ -12,8 +12,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.InvalidMediaTypeException;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,7 +41,7 @@ public class ObjectController {
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             HttpServletRequest request) throws IOException {
         byte[] body = readBoundedBody(request.getInputStream(), objectService.maxObjectSize());
-        String etag = objectService.put(bucket, stripLeadingSlash(key), body, normalizeContentType(contentType));
+        String etag = objectService.put(bucket, stripLeadingSlash(key), body, contentType);
         return ResponseEntity.ok().header(HttpHeaders.ETAG, "\"" + etag + "\"").build();
     }
 
@@ -78,18 +76,6 @@ public class ObjectController {
 
     private static String stripLeadingSlash(String key) {
         return key.startsWith("/") ? key.substring(1) : key;
-    }
-
-    private static String normalizeContentType(String contentType) {
-        if (contentType == null || contentType.isBlank()) {
-            return contentType;
-        }
-        try {
-            MediaType mediaType = MediaType.parseMediaType(contentType);
-            return mediaType.getType() + "/" + mediaType.getSubtype();
-        } catch (InvalidMediaTypeException e) {
-            return contentType;
-        }
     }
 
     private static byte[] readBoundedBody(InputStream in, long maxBytes) throws IOException {
