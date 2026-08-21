@@ -1,0 +1,29 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: iam
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cloudlite}
+    username: ${SPRING_DATASOURCE_USERNAME:cloudlite}
+    password: ${SPRING_DATASOURCE_PASSWORD:cloudlite}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+iam:
+  jwt:
+    secret: ${IAM_JWT_SECRET:dev-only-insecure-jwt-signing-secret-please-change}
+    expiry-seconds: ${IAM_JWT_EXPIRY_SECONDS:900}
