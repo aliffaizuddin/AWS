@@ -6,6 +6,7 @@ import dev.cloudlite.iam.dto.AuthorizeResponse;
 import dev.cloudlite.iam.dto.CreatePolicyRequest;
 import dev.cloudlite.iam.dto.CreatedUserResponse;
 import dev.cloudlite.iam.dto.PolicyResponse;
+import dev.cloudlite.iam.dto.RoleResponse;
 import dev.cloudlite.iam.dto.TokenResponse;
 import dev.cloudlite.iam.policy.Effect;
 import dev.cloudlite.iam.policy.PolicyDocument;
@@ -98,5 +99,53 @@ class IamApplicationIntegrationTest {
             AuthorizeResponse.class);
         assertThat(implicitDenyResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(implicitDenyResponse.getBody().decision()).isEqualTo("DENY");
+    }
+
+    @Test
+    void createRoleAttachRolePolicyAttachUserToRoleThenAuthorizeAllowsViaTheRolePath() {
+        HttpHeaders jsonHeaders = new HttpHeaders();
+        jsonHeaders.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<CreatedUserResponse> createUser = restTemplate.postForEntity(
+            "/users", new HttpEntity<>("{\"username\":\"e2e-bob\"}", jsonHeaders), CreatedUserResponse.class);
+        assertThat(createUser.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String apiKey = createUser.getBody().apiKey();
+
+        PolicyDocument roleDocument = new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, List.of("s3:ListBucket"), List.of("arn:cloudlite:s3:::e2e-role-bucket"))));
+        CreatePolicyRequest createRolePolicyRequest = new CreatePolicyRequest("e2e-role-policy", roleDocument);
+        ResponseEntity<PolicyResponse> createRolePolicy = restTemplate.postForEntity(
+            "/policies", new HttpEntity<>(createRolePolicyRequest, jsonHeaders), PolicyResponse.class);
+        assertThat(createRolePolicy.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<RoleResponse> createRole = restTemplate.postForEntity(
+            "/roles", new HttpEntity<>("{\"name\":\"e2e-role\"}", jsonHeaders), RoleResponse.class);
+        assertThat(createRole.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        restTemplate.postForEntity(
+            "/roles/" + createRole.getBody().id() + "/policies/" + createRolePolicy.getBody().id(),
+            null, Void.class);
+
+        restTemplate.postForEntity(
+            "/users/" + createUser.getBody().id() + "/roles/" + createRole.getBody().id(), null, Void.class);
+
+        HttpHeaders apiKeyHeaders = new HttpHeaders();
+        apiKeyHeaders.set("Authorization", "ApiKey " + apiKey);
+        ResponseEntity<TokenResponse> tokenResponse = restTemplate.postForEntity(
+            "/auth/token", new HttpEntity<>(null, apiKeyHeaders), TokenResponse.class);
+        assertThat(tokenResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String jwt = tokenResponse.getBody().token();
+
+        HttpHeaders bearerHeaders = new HttpHeaders();
+        bearerHeaders.set("Authorization", "Bearer " + jwt);
+        bearerHeaders.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<AuthorizeResponse> allowResponse = restTemplate.postForEntity(
+            "/authorize",
+            new HttpEntity<>(
+                "{\"action\":\"s3:ListBucket\",\"resource\":\"arn:cloudlite:s3:::e2e-role-bucket\"}", bearerHeaders),
+            AuthorizeResponse.class);
+        assertThat(allowResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(allowResponse.getBody().decision()).isEqualTo("ALLOW");
     }
 }

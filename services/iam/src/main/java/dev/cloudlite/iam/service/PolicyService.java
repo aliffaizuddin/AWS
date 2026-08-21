@@ -6,6 +6,7 @@ import dev.cloudlite.iam.domain.Policy;
 import dev.cloudlite.iam.error.IamApiException;
 import dev.cloudlite.iam.error.IamErrorCode;
 import dev.cloudlite.iam.policy.PolicyDocument;
+import dev.cloudlite.iam.policy.PolicyStatement;
 import dev.cloudlite.iam.repository.PolicyRepository;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +24,17 @@ public class PolicyService {
     }
 
     public Policy create(String name, PolicyDocument document) {
+        if (name == null || name.isBlank()) {
+            throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+        }
+        if (document == null || document.statements() == null) {
+            throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+        }
+        for (PolicyStatement statement : document.statements()) {
+            if (statement.effect() == null || statement.actions() == null || statement.resources() == null) {
+                throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+            }
+        }
         if (policies.existsByName(name)) {
             throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
         }

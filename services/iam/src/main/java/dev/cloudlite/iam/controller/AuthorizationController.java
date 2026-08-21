@@ -36,6 +36,10 @@ public class AuthorizationController {
         }
         String token = authorization.substring(BEARER_PREFIX.length());
         UUID userId = authService.parseUserId(token);
+        if (request.action() == null || request.action().isBlank()
+                || request.resource() == null || request.resource().isBlank()) {
+            throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+        }
         Decision decision = authorizationService.authorize(userId, request.action(), request.resource());
         return ResponseEntity.ok(new AuthorizeResponse(decision.name()));
     }

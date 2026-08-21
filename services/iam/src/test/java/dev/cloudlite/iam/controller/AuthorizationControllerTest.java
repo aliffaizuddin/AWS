@@ -76,4 +76,28 @@ class AuthorizationControllerTest {
                 .content("{\"action\":\"s3:GetObject\",\"resource\":\"arn:cloudlite:s3:::b/key\"}"))
             .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void authorizeReturns400WhenTheActionIsBlank() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(authService.parseUserId("good-jwt")).willReturn(userId);
+
+        mockMvc.perform(post("/authorize")
+                .header("Authorization", "Bearer good-jwt")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"  \",\"resource\":\"arn:cloudlite:s3:::b/key\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void authorizeReturns400WhenTheResourceIsMissing() throws Exception {
+        UUID userId = UUID.randomUUID();
+        given(authService.parseUserId("good-jwt")).willReturn(userId);
+
+        mockMvc.perform(post("/authorize")
+                .header("Authorization", "Bearer good-jwt")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"s3:GetObject\"}"))
+            .andExpect(status().isBadRequest());
+    }
 }

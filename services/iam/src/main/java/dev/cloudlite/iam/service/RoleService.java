@@ -25,6 +25,9 @@ public class RoleService {
     }
 
     public Role create(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+        }
         if (roles.existsByName(name)) {
             throw new IamApiException(IamErrorCode.ROLE_ALREADY_EXISTS);
         }

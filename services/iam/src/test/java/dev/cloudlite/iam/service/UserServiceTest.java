@@ -40,6 +40,14 @@ class UserServiceTest {
     }
 
     @Test
+    void createRejectsABlankUsernameAsInvalidArgument() {
+        assertThatThrownBy(() -> service.create("  "))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
     void createRejectsADuplicateUsername() {
         when(users.existsByUsername("alice")).thenReturn(true);
 

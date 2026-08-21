@@ -12,6 +12,7 @@ public enum IamErrorCode {
     TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "The supplied token has expired"),
     TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "The supplied token is invalid"),
     INVALID_ARGUMENT(HttpStatus.BAD_REQUEST, "Invalid Argument"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "The specified method is not allowed against this resource"),
     NOT_FOUND(HttpStatus.NOT_FOUND, "The specified resource does not exist"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "We encountered an internal error. Please try again.");
 

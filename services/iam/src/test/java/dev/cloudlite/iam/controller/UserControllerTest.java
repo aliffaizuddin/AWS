@@ -67,6 +67,12 @@ class UserControllerTest {
     }
 
     @Test
+    void getReturns400WhenTheIdIsNotAValidUuid() throws Exception {
+        mockMvc.perform(get("/users/not-a-uuid"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void getReturns404WhenTheUserIsMissing() throws Exception {
         UUID id = UUID.randomUUID();
         given(userService.get(id)).willThrow(new IamApiException(IamErrorCode.USER_NOT_FOUND));

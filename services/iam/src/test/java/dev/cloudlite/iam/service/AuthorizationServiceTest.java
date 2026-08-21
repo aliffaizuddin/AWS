@@ -76,6 +76,32 @@ class AuthorizationServiceTest {
     }
 
     @Test
+    void authorizeCombinesADirectlyAttachedPolicyAndARolePolicyIntoOneEffectiveList() {
+        UUID userId = UUID.randomUUID();
+        UUID directPolicyId = UUID.randomUUID();
+        UUID roleId = UUID.randomUUID();
+        UUID rolePolicyId = UUID.randomUUID();
+        Policy directPolicy = new Policy("direct-policy", "{}");
+        Policy rolePolicy = new Policy("role-policy", "{}");
+        when(userPolicies.findByIdUserId(userId)).thenReturn(List.of(new UserPolicy(userId, directPolicyId)));
+        when(userRoles.findByIdUserId(userId)).thenReturn(List.of(new UserRole(userId, roleId)));
+        when(rolePolicies.findByIdRoleId(roleId)).thenReturn(List.of(new RolePolicy(roleId, rolePolicyId)));
+        when(policies.findById(directPolicyId)).thenReturn(Optional.of(directPolicy));
+        when(policies.findById(rolePolicyId)).thenReturn(Optional.of(rolePolicy));
+        when(policyService.parseDocument(directPolicy)).thenReturn(new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, List.of("s3:GetObject"), List.of("arn:cloudlite:s3:::direct-bucket/*")))));
+        when(policyService.parseDocument(rolePolicy)).thenReturn(new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, List.of("s3:PutObject"), List.of("arn:cloudlite:s3:::role-bucket/*")))));
+
+        Decision directDecision =
+            service.authorize(userId, "s3:GetObject", "arn:cloudlite:s3:::direct-bucket/key.txt");
+        Decision roleDecision = service.authorize(userId, "s3:PutObject", "arn:cloudlite:s3:::role-bucket/key.txt");
+
+        assertThat(directDecision).isEqualTo(Decision.ALLOW);
+        assertThat(roleDecision).isEqualTo(Decision.ALLOW);
+    }
+
+    @Test
     void authorizeDeniesWhenTheUserHasNoAttachedPolicies() {
         UUID userId = UUID.randomUUID();
         when(userPolicies.findByIdUserId(userId)).thenReturn(List.of());

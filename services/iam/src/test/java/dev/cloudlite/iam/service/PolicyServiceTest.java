@@ -32,6 +32,75 @@ class PolicyServiceTest {
     }
 
     @Test
+    void createRejectsABlankNameAsInvalidArgument() {
+        assertThatThrownBy(() -> service.create("  ", new PolicyDocument(List.of())))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createRejectsANullDocumentAsInvalidArgument() {
+        assertThatThrownBy(() -> service.create("read-only", null))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createRejectsADocumentWithNullStatementsAsInvalidArgument() {
+        assertThatThrownBy(() -> service.create("read-only", new PolicyDocument(null)))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createRejectsAStatementWithANullEffectAsInvalidArgument() {
+        PolicyDocument document = new PolicyDocument(List.of(
+            new PolicyStatement(null, List.of("s3:GetObject"), List.of("arn:cloudlite:s3:::b/*"))));
+
+        assertThatThrownBy(() -> service.create("read-only", document))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createRejectsAStatementWithNullActionsAsInvalidArgument() {
+        PolicyDocument document = new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, null, List.of("arn:cloudlite:s3:::b/*"))));
+
+        assertThatThrownBy(() -> service.create("read-only", document))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createRejectsAStatementWithNullResourcesAsInvalidArgument() {
+        PolicyDocument document = new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, List.of("s3:GetObject"), null)));
+
+        assertThatThrownBy(() -> service.create("read-only", document))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
+    void createAllowsAStatementWithEmptyActionsAndResources() {
+        when(policies.existsByName("read-only")).thenReturn(false);
+        when(policies.save(any(Policy.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        PolicyDocument document = new PolicyDocument(List.of(
+            new PolicyStatement(Effect.ALLOW, List.of(), List.of())));
+
+        Policy saved = service.create("read-only", document);
+
+        assertThat(saved.getName()).isEqualTo("read-only");
+    }
+
+    @Test
     void createRejectsADuplicatePolicyNameAsInvalidArgument() {
         when(policies.existsByName("read-only")).thenReturn(true);
 

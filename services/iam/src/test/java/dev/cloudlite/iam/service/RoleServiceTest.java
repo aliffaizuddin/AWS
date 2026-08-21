@@ -34,6 +34,14 @@ class RoleServiceTest {
     }
 
     @Test
+    void createRejectsABlankNameAsInvalidArgument() {
+        assertThatThrownBy(() -> service.create("  "))
+            .isInstanceOf(IamApiException.class)
+            .extracting(e -> ((IamApiException) e).getErrorCode())
+            .isEqualTo(IamErrorCode.INVALID_ARGUMENT);
+    }
+
+    @Test
     void createRejectsADuplicateName() {
         when(roles.existsByName("developers")).thenReturn(true);
 

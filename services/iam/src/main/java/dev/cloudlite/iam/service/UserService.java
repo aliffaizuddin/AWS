@@ -37,6 +37,9 @@ public class UserService {
     }
 
     public NewUser create(String username) {
+        if (username == null || username.isBlank()) {
+            throw new IamApiException(IamErrorCode.INVALID_ARGUMENT);
+        }
         if (users.existsByUsername(username)) {
             throw new IamApiException(IamErrorCode.USER_ALREADY_EXISTS);
         }
