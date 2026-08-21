@@ -31,19 +31,21 @@ Full rationale, consequences, and alternatives considered for each
 decision below live in [`docs/decisions/`](decisions/) as individual
 ADRs — this table is a summary index, not the source of truth.
 
-| Decision | Choice | ADR |
-|---|---|---|
-| Virtualization | **Bare-metal k3s**, no Proxmox | [0001](decisions/0001-bare-metal-k3s.md) |
-| Backend language | **Go** (S3, IAM, function runner) | [0002](decisions/0002-go-backend-language.md) |
-| Function runner guest language | Python (stretch) | [0003](decisions/0003-python-function-runner-guest-language.md) |
-| Frontend | React | [0004](decisions/0004-react-frontend.md) |
-| Database | PostgreSQL | [0005](decisions/0005-postgresql-database.md) |
-| Deployment manifests | **Helm** (umbrella chart + per-service subcharts) | [0006](decisions/0006-helm-deployment-manifests.md) |
-| GitOps | ArgoCD | [0007](decisions/0007-argocd-gitops.md) |
-| CI/CD | GitHub Actions, path-triggered per service | [0008](decisions/0008-github-actions-cicd.md) |
-| Observability | **Prometheus + Grafana + Loki** (PLG stack), not ELK | [0009](decisions/0009-plg-observability-stack.md) |
-| Secrets | Sealed Secrets (Vault later, optional) | [0010](decisions/0010-sealed-secrets.md) |
-| Repo structure | Monorepo | [0011](decisions/0011-monorepo-structure.md) |
+| Decision | Choice | Why | ADR |
+|---|---|---|---|
+| Virtualization | **Bare-metal k3s**, no Proxmox | VMs cost 2-3GB RAM in overhead before workloads even start; adds a debugging layer (VM vs app issue) that provides no resume value for this project's goals. Multi-VM "multi-node" on one physical box is also partly theater — real node-level fault isolation needs real separate hardware. | [0001](decisions/0001-bare-metal-k3s.md) |
+| Backend language (S3, IAM) | **Java** (Spring Boot, Java 21+ virtual threads) | Existing strength — moves faster on the actual system-design work (multipart-upload correctness, policy engine) than learning a new language simultaneously. Virtual threads give a modern answer to Go's goroutine-style concurrency for many concurrent upload/policy-check requests. | [0013](decisions/0013-java-backend-language.md) (supersedes [0002](decisions/0002-go-backend-language.md) for S3/IAM) |
+| Function runner language | **Go** | Kept separate deliberately — JVM cold-start cost is a poor fit for a per-invocation, Lambda-style executor regardless of available RAM. Legitimate polyglot decision, not an inconsistency. | [0002](decisions/0002-go-backend-language.md) |
+| Function runner guest language | Python (stretch) | Realistic polyglot Lambda-style runtime; legitimate reason to touch Python without making it the primary language. | [0003](decisions/0003-python-function-runner-guest-language.md) |
+| Future new services | Go, once RAM headroom allows | As hardware grows (RAM upgrade / second node), new services default to Go rather than Java — keeps growth resource-aware. | — |
+| Frontend | React | Lighter fit for a small admin console (buckets, policies, invocation logs) than Angular's more enterprise-scale opinionated structure. Framework choice isn't the signal here — backend/infra is. | [0004](decisions/0004-react-frontend.md) |
+| Database | PostgreSQL | Backs S3 object metadata index + IAM users/roles/policy documents. | [0005](decisions/0005-postgresql-database.md) |
+| Deployment manifests | **Helm** (umbrella chart + per-service subcharts) | More resume-standard than raw YAML; solves real dev/prod values-override problem. | [0006](decisions/0006-helm-deployment-manifests.md) |
+| GitOps | ArgoCD | Git-commit-triggered sync into the cluster; matches how real platform teams operate. | [0007](decisions/0007-argocd-gitops.md) |
+| CI/CD | GitHub Actions, path-triggered per service | Avoids rebuilding/redeploying every service on every commit. | [0008](decisions/0008-github-actions-cicd.md) |
+| Observability | **Prometheus + Grafana + Loki** (PLG stack), not ELK | ELK's minimum realistic footprint (Elasticsearch JVM heap + Logstash + Kibana) is ~5-7GB — 50-70% of the entire workload budget on this hardware. PLG stack is ~1-1.5GB combined and is the more standard choice in k8s-native shops specifically. Documented trade-off, not a default. | [0009](decisions/0009-plg-observability-stack.md) |
+| Secrets | Sealed Secrets (Vault later, optional) | Keeps secrets out of plaintext values.yaml/manifests. | [0010](decisions/0010-sealed-secrets.md) |
+| Repo structure | Monorepo | One coherent system to walk through in interviews; simpler CI wiring via path triggers. | [0011](decisions/0011-monorepo-structure.md) |
 
 ## 4. Storage layout
 
@@ -73,7 +75,7 @@ Expressed in Kubernetes as two `StorageClass` resources (`fast-ssd`, `bulk-hdd`)
 - Users/roles with attached JSON policy documents (`Effect`/`Action`/`Resource` shape)
 - Policy evaluation engine — deny-overrides-allow logic
 - API key / JWT auth for service-to-service calls
-- S3 calls out to IAM on every request via `internal/iamclient`
+- S3 calls out to IAM on every request via a dedicated `iamclient` package
 
 ### Function runner (stretch goal, build last)
 - Upload a function, trigger on S3 object-created events
@@ -84,12 +86,16 @@ Expressed in Kubernetes as two `StorageClass` resources (`fast-ssd`, `bulk-hdd`)
 
 ```mermaid
 flowchart TD
-    Client["Client app"] --> S3["S3 API service<br/>0.5 vCPU · 512Mi"]
-    S3 -->|auth check| IAM["IAM service<br/>0.5 vCPU · 256Mi"]
+    Client["Client app"] --> S3["S3 API service<br/>Java · 1 vCPU · 1Gi"]
+    S3 -->|auth check| IAM["IAM service<br/>Java · 0.75 vCPU · 768Mi"]
     S3 --> Obj["Object store<br/>bulk-hdd · 20Gi"]
     S3 --> Meta["Metadata DB (Postgres)<br/>1 vCPU · 1Gi"]
-    Obj -->|S3 event| Fn["Function runner<br/>0.5 vCPU · 256Mi"]
+    Obj -->|S3 event| Fn["Function runner<br/>Go · 0.5 vCPU · 256Mi"]
 ```
+
+S3 and IAM are Java (Spring Boot); the function runner is deliberately Go, since JVM
+cold-start cost is a poor fit for a per-invocation executor regardless of available
+RAM. New services added later default to Go once RAM headroom allows (see §3).
 
 ## 7. Infrastructure architecture
 
@@ -123,27 +129,35 @@ deploy loop).
 | System reserved (OS + k3s) | ~1 core, 2Gi |
 | Available for pods | ~3 cores, ~10Gi limit |
 
-| Pod | Resource limit |
-|---|---|
-| S3 API | 0.5 vCPU · 512Mi |
-| IAM | 0.5 vCPU · 256Mi |
-| Function runner | 0.5 vCPU · 256Mi |
-| Postgres | 1 vCPU · 1Gi |
-| Monitoring (Prometheus+Grafana) | 0.75 vCPU · 768Mi |
-| Web UI | 0.25 vCPU · 128Mi |
-| **Total (limits, burst)** | **~3.5 vCPU · ~2.9Gi** |
+| Pod | Language | Resource limit |
+|---|---|---|
+| S3 API | Java | 1 vCPU · 1Gi |
+| IAM | Java | 0.75 vCPU · 768Mi |
+| Function runner | Go | 0.5 vCPU · 256Mi |
+| Postgres | — | 1 vCPU · 1Gi |
+| Monitoring (Prometheus+Grafana) | — | 0.75 vCPU · 768Mi |
+| Web UI | — | 0.25 vCPU · 128Mi |
+| **Total (limits, burst)** | | **~4.25 vCPU · ~3.7Gi** |
 
 Requests (guaranteed, roughly half of limits) comfortably fit the ~3 core / 10Gi budget.
-Limits slightly exceed the "safe" 3-core line, which is fine — limits are burst
-ceilings, not concurrent guarantees, and 8 threads give the scheduler room to interleave.
+Limits run a bit further past the "safe" 3-core line than a Go-only stack would (the
+JVM tax on S3/IAM), which is still fine in practice — limits are burst ceilings, not
+concurrent guarantees, and 8 threads give the scheduler room to interleave. RAM has
+generous headroom either way.
+
+**JVM-specific tuning notes:**
+- Set `-Xmx` explicitly to match container memory limits — the JVM has historically not
+  respected container limits well unless told to.
+- Bump `readinessProbe`/`livenessProbe` `initialDelaySeconds` to 5-10s (vs. Go's
+  near-instant startup) to avoid crash-looping healthy pods during JVM warm-up.
 
 ## 9. Repo structure
 
 ```
 cloudlite/
 ├── services/
-│   ├── s3/            # Go — cmd/, internal/{api,storage,metadata,iamclient}
-│   ├── iam/            # Go — cmd/, internal/{api,policy,store}
+│   ├── s3/            # Java (Spring Boot) — controller/, service/, repository/, iamclient/
+│   ├── iam/            # Java (Spring Boot) — controller/, policy/, repository/
 │   └── fnrunner/        # Go — cmd/, internal/{executor,trigger}  [stretch]
 ├── web/                 # React admin console
 ├── deploy/

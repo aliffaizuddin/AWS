@@ -3,6 +3,8 @@
 ## Status
 Accepted
 
+**Superseded by:** [0013](0013-java-backend-language.md) for S3 and IAM — the function runner remains Go.
+
 ## Context
 The S3 clone, IAM clone, and function runner all need a backend
 implementation language. This project is explicitly meant to demonstrate
