@@ -1,0 +1,10 @@
+package dev.cloudlite.iam.repository;
+
+import dev.cloudlite.iam.domain.Policy;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface PolicyRepository extends JpaRepository<Policy, UUID> {
+
+    boolean existsByName(String name);
+}
