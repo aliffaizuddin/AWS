@@ -19,8 +19,11 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String authorization = request.getHeader("Authorization");
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new IamAccessDeniedException();
+        if (authorization == null) {
+            throw new IamAccessDeniedException("missing Authorization header");
+        }
+        if (!authorization.startsWith("Bearer ")) {
+            throw new IamAccessDeniedException("malformed Authorization header");
         }
 
         @SuppressWarnings("unchecked")
@@ -33,6 +36,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         String action;
         String resource;
         if (bucket == null) {
+            if (!"GET".equals(method)) {
+                throw new IamAccessDeniedException("unrecognized request: " + method + " " + request.getRequestURI());
+            }
             action = "s3:ListAllMyBuckets";
             resource = "arn:cloudlite:s3:::*";
         } else if (key == null) {

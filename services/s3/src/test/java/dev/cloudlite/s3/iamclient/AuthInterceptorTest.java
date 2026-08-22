@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -157,6 +158,14 @@ class AuthInterceptorTest {
 
         mockMvc.perform(put("/photos").header("Authorization", "Bearer good-token"))
             .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void optionsRequestToAnObjectPathReturns403WithoutCallingIam() throws Exception {
+        mockMvc.perform(options("/photos/cat.png").header("Authorization", "Bearer good-token"))
+            .andExpect(status().isForbidden());
+
+        verify(iamClient, never()).authorize(any(), any(), any());
     }
 
     @Test

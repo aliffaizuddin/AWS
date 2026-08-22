@@ -2,13 +2,19 @@
 
 **Status:** Phase 2 (standalone) built — user/role/policy CRUD, a
 deny-overrides-allow policy evaluation engine, and an API-key-to-JWT
-auth flow with a JWT-gated `/authorize` decision endpoint. Not yet
-wired into S3 — that's a later build-order step (`architecture.md`
-§11, step 3) with its own future spec/plan. See
+auth flow with a JWT-gated `/authorize` decision endpoint. Now wired
+into S3 (`architecture.md` §11, step 3, complete) — S3 calls IAM's
+`/authorize` on every request via its own `iamclient` package and
+fails closed if IAM is unreachable (see [`s3.md`](s3.md)'s
+Dependencies section for the S3-side detail). See
 [`../superpowers/plans/2026-08-21-iam-clone-phase2.md`](../superpowers/plans/2026-08-21-iam-clone-phase2.md)
 for what was built and
 [`../superpowers/specs/2026-08-21-iam-clone-phase2-design.md`](../superpowers/specs/2026-08-21-iam-clone-phase2-design.md)
-for the design.
+for the design of this service's own Phase 2, and
+[`../superpowers/plans/2026-08-22-wire-iam-into-s3.md`](../superpowers/plans/2026-08-22-wire-iam-into-s3.md)
+and
+[`../superpowers/specs/2026-08-22-wire-iam-into-s3-design.md`](../superpowers/specs/2026-08-22-wire-iam-into-s3-design.md)
+for the wiring work itself.
 
 ## Scope
 
@@ -43,9 +49,11 @@ for the design.
 
 ## Dependencies
 
-- None yet. Will be consumed by the S3 service via a dedicated
-  `iamclient` package once wired in (see [`s3.md`](s3.md)) —
-  `architecture.md` §11, step 3.
+- Consumed by the S3 service, which now calls `/auth/token` (to
+  exchange a caller's API key for a JWT) and `/authorize` (to check a
+  specific action/resource) for every S3 request, via a dedicated
+  `iamclient` package (see [`s3.md`](s3.md)) — `architecture.md` §11,
+  step 3, now complete.
 
 ## Build/test notes
 

@@ -27,12 +27,12 @@ public class IamClient {
                 .retrieve()
                 .body(AuthorizeResponseBody.class);
         } catch (HttpClientErrorException.Unauthorized e) {
-            throw new IamAccessDeniedException();
+            throw new IamAccessDeniedException("IAM rejected the token (401)");
         } catch (RestClientException e) {
             throw new IamUnavailableException(e);
         }
         if (body == null || !"ALLOW".equals(body.decision())) {
-            throw new IamAccessDeniedException();
+            throw new IamAccessDeniedException("IAM denied the request");
         }
     }
 }

@@ -47,6 +47,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IamAccessDeniedException.class)
     public ResponseEntity<S3ErrorResponse> handleIamAccessDenied(IamAccessDeniedException ex) {
+        log.debug("s3: access denied - {}", ex.getMessage());
         return errorResponse(S3ErrorCode.ACCESS_DENIED, "");
     }
 

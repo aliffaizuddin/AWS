@@ -40,6 +40,7 @@ class S3ApplicationIntegrationTest {
 
     private static HttpServer iamStub;
     private static volatile String stubDecision = "ALLOW";
+    private static volatile int stubStatusCode = 200;
 
     @DynamicPropertySource
     static void dataDirProperty(DynamicPropertyRegistry registry) {
@@ -50,6 +51,11 @@ class S3ApplicationIntegrationTest {
     static void iamBaseUrlProperty(DynamicPropertyRegistry registry) throws IOException {
         iamStub = HttpServer.create(new InetSocketAddress(0), 0);
         iamStub.createContext("/authorize", exchange -> {
+            if (stubStatusCode != 200) {
+                exchange.sendResponseHeaders(stubStatusCode, -1);
+                exchange.close();
+                return;
+            }
             byte[] responseBytes =
                 ("{\"decision\":\"" + stubDecision + "\"}").getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -74,6 +80,7 @@ class S3ApplicationIntegrationTest {
     @BeforeEach
     void resetAuthState() {
         stubDecision = "ALLOW";
+        stubStatusCode = 200;
         restTemplate.getRestTemplate().getInterceptors().clear();
         restTemplate.getRestTemplate().getInterceptors().add((request, body, execution) -> {
             request.getHeaders().add("Authorization", "Bearer e2e-test-token");
@@ -158,6 +165,16 @@ class S3ApplicationIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).contains("AccessDenied");
+    }
+
+    @Test
+    void authorizeReturns500WhenIamIsUnavailable() {
+        stubStatusCode = 500;
+
+        ResponseEntity<String> response = restTemplate.getForEntity("/", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).contains("InternalError");
     }
 
     private static String stripQuotes(String etag) {

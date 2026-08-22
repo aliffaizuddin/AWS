@@ -1,6 +1,7 @@
 package dev.cloudlite.s3.iamclient;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -33,6 +34,7 @@ class IamClientTest {
         server.expect(requestTo("http://iam.test/authorize"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(header("Authorization", "Bearer good-token"))
+            .andExpect(content().json("{\"action\":\"s3:GetObject\",\"resource\":\"arn:cloudlite:s3:::bucket/key\"}"))
             .andRespond(withSuccess("{\"decision\":\"ALLOW\"}", MediaType.APPLICATION_JSON));
 
         client.authorize("Bearer good-token", "s3:GetObject", "arn:cloudlite:s3:::bucket/key");
