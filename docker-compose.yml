@@ -33,6 +33,23 @@ services:
       postgres:
         condition: service_healthy
 
+  iam:
+    build:
+      context: ./services/iam
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/cloudlite"
+      SPRING_DATASOURCE_USERNAME: "cloudlite"
+      SPRING_DATASOURCE_PASSWORD: "cloudlite"
+      IAM_JWT_SECRET: "dev-only-insecure-jwt-signing-secret-please-change"
+      IAM_JWT_EXPIRY_SECONDS: "900"
+      SERVER_PORT: "8081"
+      JAVA_TOOL_OPTIONS: "-Xmx768m"
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   s3-data:

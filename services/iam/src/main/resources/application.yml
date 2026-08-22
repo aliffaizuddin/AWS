@@ -1,0 +1,40 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: iam
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cloudlite}
+    username: ${SPRING_DATASOURCE_USERNAME:cloudlite}
+    password: ${SPRING_DATASOURCE_PASSWORD:cloudlite}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    table: flyway_schema_history_iam
+    # iam and s3 share one Postgres database/schema ("public"). On a brand-new
+    # volume, whichever service starts second finds objects already in that
+    # schema (created by the other service) but no history table of its own,
+    # which Flyway refuses by default ("Found non-empty schema... but no
+    # schema history table"). baseline-version: 0 tells Flyway "nothing of
+    # mine has run yet" so it still applies iam's own V1-V4 migrations in
+    # full instead of skipping them the way the baseline-version default (1)
+    # would.
+    baseline-on-migrate: true
+    baseline-version: 0
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+iam:
+  jwt:
+    secret: ${IAM_JWT_SECRET:dev-only-insecure-jwt-signing-secret-please-change}
+    expiry-seconds: ${IAM_JWT_EXPIRY_SECONDS:900}
