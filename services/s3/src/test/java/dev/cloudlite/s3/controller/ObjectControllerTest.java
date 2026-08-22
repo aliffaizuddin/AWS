@@ -21,6 +21,8 @@ import dev.cloudlite.s3.domain.ObjectMetadata;
 import dev.cloudlite.s3.error.GlobalExceptionHandler;
 import dev.cloudlite.s3.error.S3ApiException;
 import dev.cloudlite.s3.error.S3ErrorCode;
+import dev.cloudlite.s3.iamclient.AuthInterceptor;
+import dev.cloudlite.s3.iamclient.AuthWebMvcConfigurer;
 import dev.cloudlite.s3.service.ObjectService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.ByteArrayInputStream;
@@ -31,10 +33,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(ObjectController.class)
+@WebMvcTest(
+    controllers = ObjectController.class,
+    excludeFilters = @ComponentScan.Filter(
+        type = FilterType.ASSIGNABLE_TYPE,
+        classes = {AuthInterceptor.class, AuthWebMvcConfigurer.class}))
 @AutoConfigureMockMvc(addFilters = false)
 @Import(GlobalExceptionHandler.class)
 class ObjectControllerTest {
