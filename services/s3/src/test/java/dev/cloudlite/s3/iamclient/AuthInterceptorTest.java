@@ -1,10 +1,13 @@
 package dev.cloudlite.s3.iamclient;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
@@ -12,15 +15,18 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.cloudlite.s3.controller.BucketController;
+import dev.cloudlite.s3.controller.HealthController;
 import dev.cloudlite.s3.controller.ObjectController;
 import dev.cloudlite.s3.domain.ObjectMetadata;
 import dev.cloudlite.s3.error.GlobalExceptionHandler;
 import dev.cloudlite.s3.service.BucketService;
 import dev.cloudlite.s3.service.ObjectService;
 import java.io.ByteArrayInputStream;
+import java.sql.Connection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,7 +34,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = {BucketController.class, ObjectController.class})
+@WebMvcTest(controllers = {BucketController.class, ObjectController.class, HealthController.class})
 @Import(GlobalExceptionHandler.class)
 class AuthInterceptorTest {
 
@@ -43,6 +49,9 @@ class AuthInterceptorTest {
 
     @MockBean
     private ObjectService objectService;
+
+    @MockBean
+    private DataSource dataSource;
 
     @Test
     void createBucketCallsIamWithTheRightActionAndResource() throws Exception {
@@ -148,5 +157,17 @@ class AuthInterceptorTest {
 
         mockMvc.perform(put("/photos").header("Authorization", "Bearer good-token"))
             .andExpect(status().isInternalServerError());
+    }
+
+    @Test
+    void healthzWithNoAuthorizationHeaderStillReturns200WithoutCallingIam() throws Exception {
+        Connection connection = mock(Connection.class);
+        when(dataSource.getConnection()).thenReturn(connection);
+        when(connection.isValid(anyInt())).thenReturn(true);
+
+        mockMvc.perform(get("/healthz"))
+            .andExpect(status().isOk());
+
+        verify(iamClient, never()).authorize(any(), any(), any());
     }
 }
