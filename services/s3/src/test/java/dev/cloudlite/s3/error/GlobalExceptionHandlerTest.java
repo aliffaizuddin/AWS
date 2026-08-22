@@ -2,6 +2,7 @@ package dev.cloudlite.s3.error;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.cloudlite.s3.iamclient.IamAccessDeniedException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -77,6 +78,17 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody().getCode()).isEqualTo("InvalidArgument");
+    }
+
+    @Test
+    void iamAccessDeniedIsRenderedAsAwsShapedXmlAccessDenied() {
+        IamAccessDeniedException ex = new IamAccessDeniedException();
+
+        ResponseEntity<S3ErrorResponse> response = handler.handleIamAccessDenied(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getHeaders().getContentType().toString()).contains("application/xml");
+        assertThat(response.getBody().getCode()).isEqualTo("AccessDenied");
     }
 
     @Test

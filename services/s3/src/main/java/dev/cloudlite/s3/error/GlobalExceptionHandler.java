@@ -1,6 +1,7 @@
 package dev.cloudlite.s3.error;
 
 import java.util.UUID;
+import dev.cloudlite.s3.iamclient.IamAccessDeniedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -42,6 +43,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<S3ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex) {
         log.debug("s3: unsupported media type", ex);
         return errorResponse(S3ErrorCode.INVALID_ARGUMENT, "");
+    }
+
+    @ExceptionHandler(IamAccessDeniedException.class)
+    public ResponseEntity<S3ErrorResponse> handleIamAccessDenied(IamAccessDeniedException ex) {
+        return errorResponse(S3ErrorCode.ACCESS_DENIED, "");
     }
 
     @ExceptionHandler(Exception.class)
