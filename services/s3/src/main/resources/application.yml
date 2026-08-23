@@ -33,3 +33,8 @@ spring:
 
 s3:
   data-dir: ${S3_DATA_DIR:/data}
+
+iam:
+  base-url: ${IAM_BASE_URL:http://localhost:8081}
+  connect-timeout-ms: 2000
+  read-timeout-ms: 3000

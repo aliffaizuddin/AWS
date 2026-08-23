@@ -2,7 +2,13 @@ package dev.cloudlite.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,13 +38,55 @@ class S3ApplicationIntegrationTest {
     @TempDir
     static Path dataDir;
 
+    private static HttpServer iamStub;
+    private static volatile String stubDecision = "ALLOW";
+    private static volatile int stubStatusCode = 200;
+
     @DynamicPropertySource
     static void dataDirProperty(DynamicPropertyRegistry registry) {
         registry.add("s3.data-dir", () -> dataDir.toString());
     }
 
+    @DynamicPropertySource
+    static void iamBaseUrlProperty(DynamicPropertyRegistry registry) throws IOException {
+        iamStub = HttpServer.create(new InetSocketAddress(0), 0);
+        iamStub.createContext("/authorize", exchange -> {
+            if (stubStatusCode != 200) {
+                exchange.sendResponseHeaders(stubStatusCode, -1);
+                exchange.close();
+                return;
+            }
+            byte[] responseBytes =
+                ("{\"decision\":\"" + stubDecision + "\"}").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, responseBytes.length);
+            exchange.getResponseBody().write(responseBytes);
+            exchange.close();
+        });
+        iamStub.start();
+        registry.add("iam.base-url", () -> "http://localhost:" + iamStub.getAddress().getPort());
+    }
+
+    @AfterAll
+    static void stopIamStub() {
+        if (iamStub != null) {
+            iamStub.stop(0);
+        }
+    }
+
     @Autowired
     private TestRestTemplate restTemplate;
+
+    @BeforeEach
+    void resetAuthState() {
+        stubDecision = "ALLOW";
+        stubStatusCode = 200;
+        restTemplate.getRestTemplate().getInterceptors().clear();
+        restTemplate.getRestTemplate().getInterceptors().add((request, body, execution) -> {
+            request.getHeaders().add("Authorization", "Bearer e2e-test-token");
+            return execution.execute(request, body);
+        });
+    }
 
     @Test
     void healthzReturns200OnceTheAppIsUp() {
@@ -97,6 +145,36 @@ class S3ApplicationIntegrationTest {
 
         restTemplate.delete("/e2e-bucket-form/payload.txt");
         restTemplate.delete("/e2e-bucket-form");
+    }
+
+    @Test
+    void authorizeReturns403WhenTheDecisionIsDeny() {
+        stubDecision = "DENY";
+
+        ResponseEntity<String> response = restTemplate.getForEntity("/", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).contains("AccessDenied");
+    }
+
+    @Test
+    void authorizeReturns403WhenNoAuthorizationHeaderIsPresent() {
+        restTemplate.getRestTemplate().getInterceptors().clear();
+
+        ResponseEntity<String> response = restTemplate.getForEntity("/", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).contains("AccessDenied");
+    }
+
+    @Test
+    void authorizeReturns500WhenIamIsUnavailable() {
+        stubStatusCode = 500;
+
+        ResponseEntity<String> response = restTemplate.getForEntity("/", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).contains("InternalError");
     }
 
     private static String stripQuotes(String etag) {
