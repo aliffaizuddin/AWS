@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  POSTGRES_DB: cloudlite
+  POSTGRES_USER: cloudlite
+  PGDATA: /var/lib/postgresql/data/pgdata

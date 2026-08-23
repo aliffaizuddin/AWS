@@ -1,2 +1,18 @@
 global:
   namespace: cloudlite
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  password: cloudlite-dev-only-password
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    size: 10Gi
+    storageClassName: fast-ssd
