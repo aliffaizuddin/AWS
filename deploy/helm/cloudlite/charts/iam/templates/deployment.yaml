@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: iam
-  namespace: {{ .Values.global.namespace }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -23,13 +22,13 @@ spec:
             - name: SERVER_PORT
               value: "8081"
             - name: SPRING_DATASOURCE_URL
-              value: {{ .Values.datasource.url | quote }}
+              value: "jdbc:postgresql://postgres:5432/{{ .Values.global.postgres.database }}"
             - name: SPRING_DATASOURCE_USERNAME
-              value: {{ .Values.datasource.username | quote }}
+              value: {{ .Values.global.postgres.username | quote }}
             - name: IAM_JWT_EXPIRY_SECONDS
               value: {{ .Values.jwt.expirySeconds | quote }}
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx512m"
+              value: {{ .Values.javaToolOptions | quote }}
           envFrom:
             - secretRef:
                 name: postgres-credentials
@@ -47,6 +46,7 @@ spec:
               port: 8081
             initialDelaySeconds: 10
             periodSeconds: 10
+            failureThreshold: 30
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu | quote }}

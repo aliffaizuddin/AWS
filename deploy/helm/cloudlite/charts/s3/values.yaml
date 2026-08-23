@@ -1,5 +1,7 @@
 global:
-  namespace: cloudlite
+  postgres:
+    database: cloudlite
+    username: cloudlite
 
 replicaCount: 1
 
@@ -19,9 +21,7 @@ persistence:
   size: 20Gi
   storageClassName: bulk-hdd
 
-datasource:
-  url: "jdbc:postgresql://postgres:5432/cloudlite"
-  username: cloudlite
-
 iam:
   baseUrl: "http://iam:8081"
+
+javaToolOptions: "-Xmx768m"

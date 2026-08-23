@@ -15,6 +15,9 @@ bare-metal k3s node.
 - [`docs/services/`](docs/services/) — one file per service (`s3.md`,
   `iam.md`, `fnrunner.md`, `web.md`) with that service's scope and
   status. **Check the relevant file before touching a service.**
+- [`docs/platform/`](docs/platform/) — platform-layer sub-projects
+  (Helm charts, CI/CD, ArgoCD, observability, etc.) have their own docs
+  here, one file per sub-project (e.g. `helm-charts.md`).
 - [`docs/future-work.md`](docs/future-work.md) — explicit scope fence.
   If something looks missing, check here before adding it — it may be
   a deliberate non-goal with a documented revisit trigger.

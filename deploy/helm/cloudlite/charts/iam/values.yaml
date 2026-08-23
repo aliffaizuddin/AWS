@@ -1,5 +1,7 @@
 global:
-  namespace: cloudlite
+  postgres:
+    database: cloudlite
+    username: cloudlite
 
 replicaCount: 1
 
@@ -16,9 +18,7 @@ resources:
     memory: 384Mi
 
 jwt:
-  secret: dev-only-insecure-jwt-signing-secret-please-change
+  secret: ""
   expirySeconds: 900
 
-datasource:
-  url: "jdbc:postgresql://postgres:5432/cloudlite"
-  username: cloudlite
+javaToolOptions: "-Xmx512m"

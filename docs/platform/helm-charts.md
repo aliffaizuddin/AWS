@@ -38,18 +38,38 @@ should carry over to real hardware.
   likely won't affect a fresh real bare-metal install (a modern kernel
   there should already be on cgroup v2), but if `k3d cluster create` fails
   with a kubelet startup error, check `docker info | grep -i cgroup` first.
-- **Namespace flags on install vs. uninstall:** the implementation plan's
-  Task 7 commands install with no `-n` flag
-  (`helm install cloudlite deploy/helm/cloudlite -f ...`), which tracks the
-  Helm release under the `default` namespace even though the chart's
-  resources deploy into `cloudlite` (via `global.namespace`). That's fine
-  for disposable sandbox validation (tearing down the whole k3d cluster
-  hides the mismatch), but it's a trap for a real deployment — a later
-  `helm uninstall cloudlite -n cloudlite` fails with `release: not found`,
-  with no cluster-delete escape hatch. For a real (non-disposable) install,
-  use `-n`/`--create-namespace` consistently on both sides instead:
-  `helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace -f deploy/helm/cloudlite/values-dev.yaml`
+- **Namespace handling (resolved):** the chart no longer creates its own
+  `Namespace` object and no template hardcodes `metadata.namespace`
+  against a `global.namespace` value — an earlier revision of this chart
+  did both, which collided with `helm install -n cloudlite
+  --create-namespace` (Helm 3 hits "invalid ownership metadata" because
+  `--create-namespace` creates the namespace outside the release, and the
+  chart's own `Namespace` resource then conflicts with it) and separately
+  meant `helm -n <anything-else>` was silently ignored for resource
+  placement. With both removed, `-n <namespace> --create-namespace` on
+  `helm install` (and `-n <namespace>` on `helm uninstall`) is now the
+  single correct, consistent way to target any namespace:
+  `helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace -f deploy/helm/cloudlite/values-dev.yaml -f deploy/helm/cloudlite/values-secrets.yaml`
   and, correspondingly, `helm uninstall cloudlite -n cloudlite`.
+
+## PVC lifecycle asymmetry
+
+`s3-data` (the S3 blob storage PVC) is a release-managed resource —
+`helm uninstall` deletes it, and with `bulk-hdd`'s `reclaimPolicy:
+Delete`, the underlying data goes with it. `postgres-data-postgres-0`
+(created via the StatefulSet's `volumeClaimTemplates`) is NOT
+release-managed — Kubernetes never deletes `volumeClaimTemplate`-derived
+PVCs on `helm uninstall`, so it survives. Consequence: reinstalling
+after an uninstall gives S3 a fresh empty blob store while Postgres
+still has all its old `buckets`/`objects` metadata rows, so every `GET`
+on a previously-existing object 404s with a missing file. Consequence:
+`POSTGRES_PASSWORD` is only honored by Postgres's `initdb` on a
+genuinely empty data directory — since `postgres-data-postgres-0`
+survives, changing `postgres.password` and reinstalling does NOT
+actually rotate the running database's password, causing a permanent
+authentication-failure CrashLoop until manually resolved. For a
+genuinely clean reinstall (wiping all state, not just S3 blobs), delete
+the Postgres PVC first: `kubectl delete pvc postgres-data-postgres-0 -n <namespace>`.
 
 ## Known simplification
 

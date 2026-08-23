@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
-  namespace: {{ .Values.global.namespace }}
 spec:
   serviceName: postgres
   replicas: 1
@@ -35,6 +34,16 @@ spec:
             requests:
               cpu: {{ .Values.postgres.resources.requests.cpu | quote }}
               memory: {{ .Values.postgres.resources.requests.memory | quote }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.global.postgres.username }}"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.global.postgres.username }}"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

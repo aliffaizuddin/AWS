@@ -2,9 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: s3
-  namespace: {{ .Values.global.namespace }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: s3
@@ -25,13 +26,13 @@ spec:
             - name: S3_DATA_DIR
               value: "/data"
             - name: SPRING_DATASOURCE_URL
-              value: {{ .Values.datasource.url | quote }}
+              value: "jdbc:postgresql://postgres:5432/{{ .Values.global.postgres.database }}"
             - name: SPRING_DATASOURCE_USERNAME
-              value: {{ .Values.datasource.username | quote }}
+              value: {{ .Values.global.postgres.username | quote }}
             - name: IAM_BASE_URL
               value: {{ .Values.iam.baseUrl | quote }}
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx768m"
+              value: {{ .Values.javaToolOptions | quote }}
           envFrom:
             - secretRef:
                 name: postgres-credentials
@@ -50,6 +51,7 @@ spec:
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
+            failureThreshold: 30
           resources:
             limits:
               cpu: {{ .Values.resources.limits.cpu | quote }}
