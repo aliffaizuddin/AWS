@@ -1,0 +1,6 @@
+apiVersion: v2
+name: s3
+description: CloudLite S3 subchart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

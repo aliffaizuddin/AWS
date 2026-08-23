@@ -3,3 +3,6 @@
 postgres:
   persistence:
     size: 2Gi
+s3:
+  persistence:
+    size: 2Gi
