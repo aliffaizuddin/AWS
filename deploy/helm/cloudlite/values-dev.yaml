@@ -1,0 +1,3 @@
+# Local/dev overrides layered over values.yaml — never fork the chart
+# per environment, per ADR 0006. Empty for now; later tasks add
+# smaller persistence sizes here.
