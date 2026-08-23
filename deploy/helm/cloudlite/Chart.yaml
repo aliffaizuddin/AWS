@@ -4,3 +4,7 @@ description: CloudLite platform — S3 + IAM clone, self-hosted on k3s
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+dependencies:
+  - name: iam
+    version: "0.1.0"
+    repository: "file://charts/iam"
