@@ -170,7 +170,8 @@ cloudlite/
 │   │       ├── charts/{s3,iam,fnrunner,web}/
 │   │       └── templates/{ingress.yaml, storageclasses.yaml}
 │   └── argocd/applications/
-├── .github/workflows/    # ci-s3.yml, ci-iam.yml, ci-fnrunner.yml, ci-web.yml (path-triggered)
+├── .github/workflows/    # ci-java-service.yml (reusable), ci-s3.yml, ci-iam.yml,
+│                         # ci-helm.yml (path-triggered); ci-fnrunner.yml/ci-web.yml pending those services
 ├── docker-compose.yml    # local dev loop, no k8s
 ├── docs/
 │   ├── architecture.md   # this file
