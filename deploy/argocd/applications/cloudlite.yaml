@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: git@github.com:aliffaizuddin/AWS.git
-    targetRevision: feat/argocd
+    targetRevision: main
     path: deploy/helm/cloudlite
     helm:
       valueFiles:
