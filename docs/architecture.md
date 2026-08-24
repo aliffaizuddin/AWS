@@ -137,7 +137,9 @@ deploy loop).
 | Postgres | — | 1 vCPU · 1Gi |
 | Monitoring (Prometheus+Grafana) | — | 0.75 vCPU · 768Mi |
 | Web UI | — | 0.25 vCPU · 128Mi |
-| **Total (limits, burst)** | | **~4.25 vCPU · ~3.7Gi** |
+| ArgoCD (trimmed: controller + repo-server + server + redis) | — | ~1.05 vCPU · ~1.2Gi |
+| Sealed Secrets controller | — | 100m · 128Mi |
+| **Total (limits, burst)** | | **~5.4 vCPU · ~5.0Gi** |
 
 Requests (guaranteed, roughly half of limits) comfortably fit the ~3 core / 10Gi budget.
 Limits run a bit further past the "safe" 3-core line than a Go-only stack would (the

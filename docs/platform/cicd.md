@@ -28,8 +28,9 @@ for the design.
   (even with `--strict`) — it's the `helm template` steps that actually
   fail on a missing/empty required value, so those are the real
   enforcement here. The fixtures are placeholder, non-secret values,
-  safe to commit, and unrelated to the real (gitignored)
-  `values-secrets.yaml` used for actual installs.
+  safe to commit — the chart's real secrets (`postgres-credentials`/`iam-jwt-secret`)
+  are `SealedSecret`s as of the ArgoCD sub-project, not driven by any
+  values file at all (see `argocd.md`).
 
 ## Registry and tagging
 

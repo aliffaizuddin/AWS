@@ -49,7 +49,8 @@ should carry over to real hardware.
   placement. With both removed, `-n <namespace> --create-namespace` on
   `helm install` (and `-n <namespace>` on `helm uninstall`) is now the
   single correct, consistent way to target any namespace:
-  `helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace -f deploy/helm/cloudlite/values-dev.yaml -f deploy/helm/cloudlite/values-secrets.yaml`
+  `helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace -f deploy/helm/cloudlite/values-dev.yaml`
+  (as of the ArgoCD sub-project, `postgres-credentials`/`iam-jwt-secret` are `SealedSecret`s, not driven by a `values-secrets.yaml` flag — see `argocd.md`)
   and, correspondingly, `helm uninstall cloudlite -n cloudlite`.
 
 ## PVC lifecycle asymmetry
