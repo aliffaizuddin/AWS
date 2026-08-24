@@ -26,7 +26,11 @@ for the design.
   `required()` guard on either secret.
 - `deploy/argocd/applications/cloudlite.yaml` — the one `Application`,
   `syncPolicy.automated: {prune: true, selfHeal: true}`, watching
-  `deploy/helm/cloudlite` on `main`.
+  `deploy/helm/cloudlite` on `main`. Renders with `values.yaml` +
+  `values-dev.yaml` — the same dev-sized overrides (smaller PVCs) used
+  for every sandbox `helm install` in the prior sub-projects. A real
+  bare-metal deployment should point this at a `values-prod.yaml` (or
+  similar) the deployer creates, not this dev file.
 - Repo access: a read-only SSH deploy key (not the fine-grained PAT the
   design spec originally called for — creating one non-interactively
   isn't possible in this environment; a deploy key is the automatable
@@ -34,11 +38,99 @@ for the design.
 
 ## Bootstrap order (one-time, not GitOps-managed)
 
-Install Sealed Secrets → install ArgoCD → apply the repo-credentials
-`Secret` into `argocd` → apply
-`deploy/argocd/applications/cloudlite.yaml`. From that point on,
-ArgoCD's own reconciliation loop is the only thing that should touch
-the `cloudlite` namespace.
+Every command below is one-time, run manually against whichever cluster
+is the target — none of this is git-tracked reconciliation, since
+ArgoCD doesn't exist yet to do it.
+
+1. **Install Sealed Secrets:**
+   ```bash
+   kubectl create namespace sealed-secrets
+   kubectl apply -f deploy/argocd/install/sealed-secrets-install.yaml
+   kubectl rollout status deployment/sealed-secrets-controller -n sealed-secrets
+   ```
+2. **Re-seal both secrets against this specific cluster** — `SealedSecret`
+   ciphertext is cryptographically bound to the sealing cluster's key
+   (see "Known operational properties" below), so the ciphertext
+   already committed in this repo only decrypts on the k3d cluster it
+   was validated against. Generate real values and reseal for a new
+   cluster:
+   ```bash
+   POSTGRES_PASSWORD=$(openssl rand -base64 24)
+   IAM_JWT_SECRET=$(openssl rand -base64 32)
+   kubectl create namespace cloudlite --dry-run=client -o yaml | kubectl apply -f -
+
+   cat > /tmp/plain-postgres-secret.yaml << EOF
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: postgres-credentials
+     namespace: cloudlite
+   type: Opaque
+   stringData:
+     POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
+     SPRING_DATASOURCE_PASSWORD: "$POSTGRES_PASSWORD"
+   EOF
+   kubeseal --format=yaml --controller-namespace=sealed-secrets \
+     < /tmp/plain-postgres-secret.yaml \
+     > deploy/helm/cloudlite/templates/postgres/sealedsecret.yaml
+
+   cat > /tmp/plain-iam-secret.yaml << EOF
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: iam-jwt-secret
+     namespace: cloudlite
+   type: Opaque
+   stringData:
+     IAM_JWT_SECRET: "$IAM_JWT_SECRET"
+   EOF
+   kubeseal --format=yaml --controller-namespace=sealed-secrets \
+     < /tmp/plain-iam-secret.yaml \
+     > deploy/helm/cloudlite/charts/iam/templates/sealedsecret.yaml
+
+   rm -f /tmp/plain-postgres-secret.yaml /tmp/plain-iam-secret.yaml
+   git add deploy/helm/cloudlite/templates/postgres/sealedsecret.yaml \
+           deploy/helm/cloudlite/charts/iam/templates/sealedsecret.yaml
+   git commit -m "chore(argocd): re-seal secrets for <this cluster>"
+   ```
+   `--controller-namespace=sealed-secrets` is required — it isn't the
+   `kubeseal` default (`kube-system`), since Sealed Secrets was
+   deliberately installed into its own namespace here.
+3. **Install ArgoCD:**
+   ```bash
+   kubectl create namespace argocd
+   kubectl apply -n argocd -f deploy/argocd/install/argocd-install.yaml
+   kubectl rollout status statefulset/argocd-application-controller -n argocd
+   kubectl rollout status deployment/argocd-repo-server -n argocd
+   kubectl rollout status deployment/argocd-server -n argocd
+   kubectl rollout status deployment/argocd-redis -n argocd
+   ```
+   `-n argocd` on the `apply` is required, not optional — none of the
+   59 upstream objects declare their own `metadata.namespace`, but the
+   ClusterRoleBindings hardcode `subjects[].namespace: argocd`, so
+   applying without `-n argocd` silently creates the ServiceAccounts in
+   the wrong namespace and leaves RBAC broken.
+4. **Apply the repo-credentials `Secret`** — copy
+   `deploy/argocd/repo-credentials-secret.yaml.example` to
+   `deploy/argocd/repo-credentials-secret.yaml` (gitignored), fill in a
+   real read-only SSH deploy key's private half, then:
+   ```bash
+   kubectl apply -f deploy/argocd/repo-credentials-secret.yaml
+   ```
+5. **Apply the Application:**
+   ```bash
+   kubectl apply -f deploy/argocd/applications/cloudlite.yaml
+   ```
+
+From that point on, ArgoCD's own reconciliation loop is the only thing
+that should touch the `cloudlite` namespace.
+
+**Reaching the ArgoCD UI** (not exposed via ingress — see Out of scope):
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
+Then open `https://localhost:8080`, log in as `admin` with that password.
 
 ## Validated against
 
@@ -65,6 +157,19 @@ configured requests/limits, not these idle numbers.
   bare-metal node) means re-running `kubeseal` and committing the new
   ciphertext — this is how Sealed Secrets is designed to work, not a
   bug to fix.
+- **The chart is now pinned to the `cloudlite` namespace, not
+  install-time-configurable:** Sealed Secrets' default "strict" scope
+  cryptographically binds ciphertext to a specific namespace+name, so
+  `templates/postgres/sealedsecret.yaml`/`charts/iam/templates/sealedsecret.yaml`
+  hardcode `namespace: cloudlite` rather than templating
+  `{{ .Release.Namespace }}` like the rest of the chart does. This
+  means `helm install ... -n <anything-other-than-cloudlite>` now
+  renders Deployments into that namespace while both `SealedSecret`s
+  (and their derived `Secret`s) stay in `cloudlite` — the pods can't
+  find their secrets. Installing to any namespace other than
+  `cloudlite` requires re-sealing both secrets with that namespace
+  baked in first. `docs/platform/helm-charts.md`'s "any namespace"
+  claim predates this and is corrected there too (see Fix below).
 - **The GitOps-loop-proof step used a locally-built, `k3d
   image import`-ed image, not the real `ghcr.io/aliffaizuddin/aws/s3`
   image** — pulling the real private GHCR image needs a registry pull

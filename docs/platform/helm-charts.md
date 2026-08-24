@@ -48,7 +48,11 @@ should carry over to real hardware.
   meant `helm -n <anything-else>` was silently ignored for resource
   placement. With both removed, `-n <namespace> --create-namespace` on
   `helm install` (and `-n <namespace>` on `helm uninstall`) is now the
-  single correct, consistent way to target any namespace:
+  single correct, consistent way to target any namespace — **except**
+  the `postgres-credentials`/`iam-jwt-secret` `SealedSecret`s added in
+  the ArgoCD sub-project, which are hardcoded to the `cloudlite`
+  namespace and require re-sealing to target anywhere else (see
+  `argocd.md`'s "Known operational properties"):
   `helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace -f deploy/helm/cloudlite/values-dev.yaml`
   (as of the ArgoCD sub-project, `postgres-credentials`/`iam-jwt-secret` are `SealedSecret`s, not driven by a `values-secrets.yaml` flag — see `argocd.md`)
   and, correspondingly, `helm uninstall cloudlite -n cloudlite`.

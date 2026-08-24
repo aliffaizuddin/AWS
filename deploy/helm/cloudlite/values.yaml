@@ -22,7 +22,7 @@ s3:
   replicaCount: 1
   image:
     repository: s3
-    tag: "25adda8"
+    tag: "0.1.0"
 
 iam:
   replicaCount: 1

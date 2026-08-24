@@ -1,7 +1,6 @@
 # CI-only fixture — see deploy/helm/cloudlite/values-ci.yaml's header
-# for why this exists. Same purpose, but shaped for linting/templating
-# this subchart standalone (its own values.yaml has `jwt.secret` at
-# the top level, not nested under `iam:` the way the umbrella chart
-# exposes it).
+# for why this exists (and why its value is now inert). Kept only
+# because ci-helm.yml still passes it via `-f` when linting/templating
+# this subchart standalone.
 jwt:
   secret: "ci-lint-placeholder-at-least-32-bytes-long"

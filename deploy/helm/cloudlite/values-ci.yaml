@@ -1,8 +1,9 @@
-# CI-only fixture: placeholder, non-secret values that satisfy this
-# chart's Helm `required()` guards so `helm lint`/`helm template` can
-# run without a real deploy/helm/cloudlite/values-secrets.yaml (which
-# is gitignored and never committed). Never use these values for a
-# real install.
+# CI-only fixture, originally added to satisfy this chart's Helm
+# `required()` guards for helm lint/template in CI. As of the ArgoCD
+# sub-project those guards no longer exist (the chart's real secrets
+# are SealedSecrets, not Helm values) — this file is kept only because
+# .github/workflows/ci-helm.yml still passes it via `-f`. The values
+# below are now inert; never use them for a real install regardless.
 postgres:
   password: "ci-lint-placeholder"
 iam:
