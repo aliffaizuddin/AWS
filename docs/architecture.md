@@ -168,7 +168,7 @@ cloudlite/
 │   │       ├── values.yaml
 │   │       ├── values-dev.yaml
 │   │       ├── charts/{s3,iam,fnrunner,web}/
-│   │       └── templates/{namespace.yaml, ingress.yaml, storageclasses.yaml}
+│   │       └── templates/{ingress.yaml, storageclasses.yaml}
 │   └── argocd/applications/
 ├── .github/workflows/    # ci-s3.yml, ci-iam.yml, ci-fnrunner.yml, ci-web.yml (path-triggered)
 ├── docker-compose.yml    # local dev loop, no k8s
@@ -177,6 +177,7 @@ cloudlite/
 │   ├── future-work.md    # explicit scope fence
 │   ├── decisions/        # one ADR per major decision (§3)
 │   ├── services/         # one file per service — scope + status
+│   ├── platform/         # one file per platform-layer sub-project — Helm charts, CI/CD, ArgoCD, observability, etc.
 │   └── superpowers/       # AI-session design docs (specs/) and plans (plans/)
 ├── CLAUDE.md
 └── README.md

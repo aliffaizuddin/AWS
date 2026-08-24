@@ -1,0 +1,24 @@
+global:
+  postgres:
+    database: cloudlite
+    username: cloudlite
+
+replicaCount: 1
+
+image:
+  repository: iam
+  tag: "0.1.0"
+
+resources:
+  limits:
+    cpu: "750m"
+    memory: 768Mi
+  requests:
+    cpu: 375m
+    memory: 384Mi
+
+jwt:
+  secret: ""
+  expirySeconds: 900
+
+javaToolOptions: "-Xmx512m"

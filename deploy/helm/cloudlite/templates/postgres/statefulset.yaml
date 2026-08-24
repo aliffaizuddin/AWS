@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-config
+            - secretRef:
+                name: postgres-credentials
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            limits:
+              cpu: {{ .Values.postgres.resources.limits.cpu | quote }}
+              memory: {{ .Values.postgres.resources.limits.memory | quote }}
+            requests:
+              cpu: {{ .Values.postgres.resources.requests.cpu | quote }}
+              memory: {{ .Values.postgres.resources.requests.memory | quote }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.global.postgres.username }}"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.global.postgres.username }}"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.persistence.size }}

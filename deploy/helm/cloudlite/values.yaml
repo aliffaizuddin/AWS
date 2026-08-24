@@ -1,0 +1,31 @@
+global:
+  postgres:
+    database: cloudlite
+    username: cloudlite
+
+postgres:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    size: 10Gi
+    storageClassName: fast-ssd
+
+s3:
+  replicaCount: 1
+  image:
+    repository: s3
+    tag: "0.1.0"
+
+iam:
+  replicaCount: 1
+  image:
+    repository: iam
+    tag: "0.1.0"

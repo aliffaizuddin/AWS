@@ -1,0 +1,27 @@
+global:
+  postgres:
+    database: cloudlite
+    username: cloudlite
+
+replicaCount: 1
+
+image:
+  repository: s3
+  tag: "0.1.0"
+
+resources:
+  limits:
+    cpu: "1"
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+persistence:
+  size: 20Gi
+  storageClassName: bulk-hdd
+
+iam:
+  baseUrl: "http://iam:8081"
+
+javaToolOptions: "-Xmx768m"

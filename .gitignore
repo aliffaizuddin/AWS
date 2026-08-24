@@ -1,1 +1,5 @@
 .idea/
+deploy/helm/cloudlite/values-secrets.yaml
+deploy/helm/cloudlite/Chart.lock
+deploy/helm/cloudlite/charts/*.tgz
+deploy/helm/cloudlite/charts/*/charts/
