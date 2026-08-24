@@ -106,8 +106,8 @@ ArgoCD doesn't exist yet to do it.
    kubectl rollout status deployment/argocd-redis -n argocd
    ```
    `-n argocd` on the `apply` is required, not optional — none of the
-   59 upstream objects declare their own `metadata.namespace`, but the
-   ClusterRoleBindings hardcode `subjects[].namespace: argocd`, so
+   37 objects in this manifest declare their own `metadata.namespace`,
+   but the ClusterRoleBindings hardcode `subjects[].namespace: argocd`, so
    applying without `-n argocd` silently creates the ServiceAccounts in
    the wrong namespace and leaves RBAC broken.
 4. **Apply the repo-credentials `Secret`** — copy
@@ -161,8 +161,9 @@ configured requests/limits, not these idle numbers.
   install-time-configurable:** Sealed Secrets' default "strict" scope
   cryptographically binds ciphertext to a specific namespace+name, so
   `templates/postgres/sealedsecret.yaml`/`charts/iam/templates/sealedsecret.yaml`
-  hardcode `namespace: cloudlite` rather than templating
-  `{{ .Release.Namespace }}` like the rest of the chart does. This
+  hardcode `namespace: cloudlite`, unlike every other template in the
+  chart, which omits `metadata.namespace` entirely and relies on
+  whatever namespace `helm install -n <namespace>` supplies. This
   means `helm install ... -n <anything-other-than-cloudlite>` now
   renders Deployments into that namespace while both `SealedSecret`s
   (and their derived `Secret`s) stay in `cloudlite` — the pods can't
