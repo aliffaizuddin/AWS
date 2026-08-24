@@ -1,0 +1,21 @@
+name: CI - iam
+
+on:
+  pull_request:
+    paths:
+      - "services/iam/**"
+  push:
+    branches: [main]
+    paths:
+      - "services/iam/**"
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci-java-service.yml
+    with:
+      service-name: iam
+      service-path: services/iam
+      image-name: ghcr.io/aliffaizuddin/aws/iam
