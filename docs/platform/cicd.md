@@ -23,9 +23,13 @@ for the design.
   chart and both subcharts independently. Uses two small committed
   fixtures (`deploy/helm/cloudlite/values-ci.yaml`,
   `deploy/helm/cloudlite/charts/iam/values-ci.yaml`) to satisfy the
-  chart's `required()` secret guards — these are placeholder,
-  non-secret values, safe to commit, and unrelated to the real
-  (gitignored) `values-secrets.yaml` used for actual installs.
+  chart's `required()` secret guards. Note: `helm lint` only logs a
+  missing `required()` value as an `[INFO]` notice and still exits 0
+  (even with `--strict`) — it's the `helm template` steps that actually
+  fail on a missing/empty required value, so those are the real
+  enforcement here. The fixtures are placeholder, non-secret values,
+  safe to commit, and unrelated to the real (gitignored)
+  `values-secrets.yaml` used for actual installs.
 
 ## Registry and tagging
 
@@ -50,8 +54,9 @@ The real GitHub repository, not a sandbox stand-in — see this plan's
 Task 6 for the exact validation branches/PRs used to confirm each
 workflow fires only for its own path, that `mvn test` genuinely runs
 each service's Testcontainers-backed integration suite, and that
-`ci-helm.yml` genuinely fails on a broken chart value before passing
-once fixed.
+`ci-helm.yml` genuinely fails when its CI fixture file is missing (a
+`helm template` "no such file" error) before passing once the fixture is
+restored.
 
 ## Out of scope
 
