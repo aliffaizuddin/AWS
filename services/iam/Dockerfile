@@ -5,6 +5,7 @@ RUN mvn -B dependency:go-offline
 COPY src ./src
 RUN mvn -B -DskipTests package
 
+# Runtime stage: JRE only, no Maven/JDK — the jar is already built above.
 FROM eclipse-temurin:21-jre
 COPY --from=build /src/target/iam-0.1.0.jar /app/iam.jar
 ENTRYPOINT ["java", "-jar", "/app/iam.jar"]

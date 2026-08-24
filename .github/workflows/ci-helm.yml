@@ -1,0 +1,38 @@
+name: CI - Helm charts
+
+on:
+  pull_request:
+    paths:
+      - "deploy/helm/**"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/helm/**"
+
+jobs:
+  lint-and-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint umbrella chart
+        run: helm lint deploy/helm/cloudlite -f deploy/helm/cloudlite/values-ci.yaml
+
+      - name: Template umbrella chart
+        run: helm template cloudlite deploy/helm/cloudlite -f deploy/helm/cloudlite/values-ci.yaml
+
+      - name: Lint s3 subchart
+        run: helm lint deploy/helm/cloudlite/charts/s3
+
+      - name: Template s3 subchart
+        run: helm template s3 deploy/helm/cloudlite/charts/s3
+
+      - name: Lint iam subchart
+        run: helm lint deploy/helm/cloudlite/charts/iam -f deploy/helm/cloudlite/charts/iam/values-ci.yaml
+
+      - name: Template iam subchart
+        run: helm template iam deploy/helm/cloudlite/charts/iam -f deploy/helm/cloudlite/charts/iam/values-ci.yaml

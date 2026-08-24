@@ -1,0 +1,21 @@
+name: CI - s3
+
+on:
+  pull_request:
+    paths:
+      - "services/s3/**"
+  push:
+    branches: [main]
+    paths:
+      - "services/s3/**"
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci-java-service.yml
+    with:
+      service-name: s3
+      service-path: services/s3
+      image-name: ghcr.io/aliffaizuddin/aws/s3
