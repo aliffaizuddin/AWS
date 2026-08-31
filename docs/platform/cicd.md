@@ -22,14 +22,14 @@ for the design.
   `deploy/helm/**`: `helm lint` + `helm template` against the umbrella
   chart and both subcharts independently. Uses two small committed
   fixtures (`deploy/helm/cloudlite/values-ci.yaml`,
-  `deploy/helm/cloudlite/charts/iam/values-ci.yaml`) to satisfy the
-  chart's `required()` secret guards. Note: `helm lint` only logs a
-  missing `required()` value as an `[INFO]` notice and still exits 0
-  (even with `--strict`) — it's the `helm template` steps that actually
-  fail on a missing/empty required value, so those are the real
-  enforcement here. The fixtures are placeholder, non-secret values,
-  safe to commit, and unrelated to the real (gitignored)
-  `values-secrets.yaml` used for actual installs.
+  `deploy/helm/cloudlite/charts/iam/values-ci.yaml`), originally added
+  to satisfy the chart's `required()` secret guards. As of the ArgoCD
+  sub-project those guards no longer exist — the chart's real secrets
+  (`postgres-credentials`/`iam-jwt-secret`) are `SealedSecret`s, not
+  driven by any values file at all (see `argocd.md`). The two fixture
+  files are kept only because `ci-helm.yml`'s `-f` flags still
+  reference them; their `postgres.password`/`jwt.secret` keys are now
+  inert and safe to ignore.
 
 ## Registry and tagging
 
@@ -61,8 +61,9 @@ restored.
 ## Out of scope
 
 `ci-fnrunner.yml`/`ci-web.yml` (neither service exists yet),
-auto-bumping `deploy/helm/cloudlite/values.yaml`'s image tags (the
-ArgoCD sub-project's job), any registry other than `ghcr.io`, image
+auto-bumping `deploy/helm/cloudlite/values.yaml`'s image tags (deferred
+— see `argocd.md`'s Out of scope, which explicitly does not build an
+Image Updater either), any registry other than `ghcr.io`, image
 signing/provenance attestation, and configuring GitHub branch
 protection "required checks" (a one-time repo-settings action, not a
 file in this repo).

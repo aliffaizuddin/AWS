@@ -137,12 +137,16 @@ deploy loop).
 | Postgres | — | 1 vCPU · 1Gi |
 | Monitoring (Prometheus+Grafana) | — | 0.75 vCPU · 768Mi |
 | Web UI | — | 0.25 vCPU · 128Mi |
-| **Total (limits, burst)** | | **~4.25 vCPU · ~3.7Gi** |
+| ArgoCD (trimmed: controller + repo-server + server + redis) | — | ~1.05 vCPU · ~1.2Gi |
+| Sealed Secrets controller | — | 100m · 128Mi |
+| **Total (limits, burst)** | | **~5.4 vCPU · ~5.0Gi** |
 
 Requests (guaranteed, roughly half of limits) comfortably fit the ~3 core / 10Gi budget.
-Limits run a bit further past the "safe" 3-core line than a Go-only stack would (the
-JVM tax on S3/IAM), which is still fine in practice — limits are burst ceilings, not
-concurrent guarantees, and 8 threads give the scheduler room to interleave. RAM has
+Limits now run well past the "safe" 3-core line (~5.4 vCPU vs. ~3 available, roughly
+80% over) — still fine in practice, since limits are burst ceilings, not concurrent
+guarantees, and none of these components (JVM services, ArgoCD, Sealed Secrets) sustain
+their full limit simultaneously in normal operation. Worth re-measuring under real load
+once observability (Prometheus) lands, rather than treating this budget as final. RAM has
 generous headroom either way.
 
 **JVM-specific tuning notes:**
@@ -169,7 +173,10 @@ cloudlite/
 │   │       ├── values-dev.yaml
 │   │       ├── charts/{s3,iam,fnrunner,web}/
 │   │       └── templates/{ingress.yaml, storageclasses.yaml}
-│   └── argocd/applications/
+│   └── argocd/
+│       ├── install/               # trimmed argocd-install.yaml, sealed-secrets-install.yaml
+│       ├── repo-credentials-secret.yaml.example
+│       └── applications/
 ├── .github/workflows/    # ci-java-service.yml (reusable), ci-s3.yml, ci-iam.yml,
 │                         # ci-helm.yml (path-triggered); ci-fnrunner.yml/ci-web.yml pending those services
 ├── docker-compose.yml    # local dev loop, no k8s

@@ -18,7 +18,6 @@ resources:
     memory: 384Mi
 
 jwt:
-  secret: ""
   expirySeconds: 900
 
 javaToolOptions: "-Xmx512m"

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudlite
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:aliffaizuddin/AWS.git
+    targetRevision: main
+    path: deploy/helm/cloudlite
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudlite
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
