@@ -19,6 +19,14 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Add chart repos
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+
+      - name: Build umbrella chart dependencies
+        run: helm dependency build deploy/helm/cloudlite
+
       - name: Lint umbrella chart
         run: helm lint deploy/helm/cloudlite -f deploy/helm/cloudlite/values-ci.yaml
 

@@ -2,6 +2,8 @@ package dev.cloudlite.s3;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -10,9 +12,15 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpEntity;
@@ -29,6 +37,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
+@ExtendWith(OutputCaptureExtension.class)
+@AutoConfigureObservability
 class S3ApplicationIntegrationTest {
 
     @Container
@@ -73,6 +83,8 @@ class S3ApplicationIntegrationTest {
             iamStub.stop(0);
         }
     }
+
+    private static final Logger log = LoggerFactory.getLogger(S3ApplicationIntegrationTest.class);
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -175,6 +187,33 @@ class S3ApplicationIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody()).contains("InternalError");
+    }
+
+    @Test
+    void actuatorPrometheusIsReachableWithoutAuthAndTagsMetricsByApplication() {
+        restTemplate.getRestTemplate().getInterceptors().clear();
+
+        ResponseEntity<String> response = restTemplate.getForEntity("/actuator/prometheus", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes");
+        assertThat(response.getBody()).contains("application=\"s3\"");
+        assertThat(response.getBody()).contains("http_server_requests_seconds_bucket");
+    }
+
+    @Test
+    void logLinesAreJsonFormatted(CapturedOutput output) throws Exception {
+        log.info("json-logging-smoke-test-marker");
+
+        String jsonLine = output.getOut().lines()
+            .filter(line -> line.contains("json-logging-smoke-test-marker"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("marker line not found in captured output"));
+
+        JsonNode node = new ObjectMapper().readTree(jsonLine);
+        assertThat(node.get("message").asText()).isEqualTo("json-logging-smoke-test-marker");
+        assertThat(node.has("level")).isTrue();
+        assertThat(node.has("logger_name")).isTrue();
     }
 
     private static String stripQuotes(String etag) {

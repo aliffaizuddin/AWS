@@ -63,7 +63,12 @@ dependencies, ahead of any real caller existing. `/healthz` is
 exposed from the first commit. Admin CRUD endpoints (`/users`,
 `/roles`, `/policies`, and their attachment endpoints) are open — no
 auth — in this phase, mirroring S3 Phase 1's own bootstrap posture;
-only `/auth/token` and `/authorize` are auth-gated.
+only `/auth/token` and `/authorize` are auth-gated. IAM never had a
+blanket auth interceptor, so no exemption-list change was needed when
+Actuator was added: like S3, IAM exposes `/actuator/prometheus`
+(Micrometer/Actuator metrics, unauthenticated by design for
+Prometheus scraping) and emits JSON-structured logs via Logback for
+ingestion by Loki.
 
 ## Out of scope
 

@@ -15,6 +15,6 @@ public class AuthWebMvcConfigurer implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(authInterceptor).excludePathPatterns("/healthz", "/error");
+        registry.addInterceptor(authInterceptor).excludePathPatterns("/healthz", "/error", "/actuator/**");
     }
 }

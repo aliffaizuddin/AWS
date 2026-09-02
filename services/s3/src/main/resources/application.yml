@@ -38,3 +38,18 @@ iam:
   base-url: ${IAM_BASE_URL:http://localhost:8081}
   connect-timeout-ms: 2000
   read-timeout-ms: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
