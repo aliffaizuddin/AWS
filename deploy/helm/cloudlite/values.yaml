@@ -32,6 +32,8 @@ iam:
 
 prometheus:
   server:
+    global:
+      scrape_interval: 15s
     persistentVolume:
       size: 8Gi
       storageClass: bulk-hdd
@@ -42,6 +44,15 @@ prometheus:
       limits:
         cpu: 400m
         memory: 512Mi
+  configmapReload:
+    prometheus:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 25m
+          memory: 32Mi
   alertmanager:
     enabled: false
   kube-state-metrics:
@@ -89,6 +100,20 @@ loki:
     enabled: false
   test:
     enabled: false
+  # Memory below is higher than a first-pass guess (10m/16Mi req,
+  # 25m/32Mi limit) would suggest: live k3d verification showed the
+  # kiwigrid/k8s-sidecar 2.5.0 image (loki-sc-rules) settles at a
+  # steady-state ~70Mi RSS, not a transient startup spike — a 32Mi
+  # limit OOMKilled it in a persistent crash loop. 100Mi gives ~40%
+  # headroom over the observed steady state.
+  sidecar:
+    resources:
+      requests:
+        cpu: 15m
+        memory: 48Mi
+      limits:
+        cpu: 100m
+        memory: 100Mi
   read:
     replicas: 0
   write:
@@ -133,6 +158,12 @@ alloy:
 
         loki.source.file "pods" {
           targets    = local.file_match.pods.targets
+          forward_to = [loki.process.pods.receiver]
+        }
+
+        loki.process "pods" {
+          stage.cri {}
+
           forward_to = [loki.write.default.receiver]
         }
 
@@ -150,17 +181,41 @@ alloy:
       limits:
         cpu: 150m
         memory: 128Mi
+  configReloader:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 25m
+        memory: 32Mi
 
 grafana:
   admin:
     existingSecret: grafana-admin
     userKey: admin-user
     passwordKey: admin-password
+  testFramework:
+    enabled: false
   sidecar:
     datasources:
       enabled: true
     dashboards:
       enabled: true
+    # Memory below is higher than a first-pass guess (25m/32Mi req,
+    # 50m/64Mi limit) would suggest: live k3d verification showed each
+    # kiwigrid/k8s-sidecar 2.5.0 container (grafana-sc-dashboard,
+    # grafana-sc-datasources) settles at a steady-state ~76-77Mi RSS,
+    # not a transient startup spike — a 64Mi limit OOMKilled both in a
+    # persistent crash loop. 100Mi gives headroom over the observed
+    # steady state.
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 100Mi
   persistence:
     enabled: false
   resources:

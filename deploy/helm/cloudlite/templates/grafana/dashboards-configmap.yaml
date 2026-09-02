@@ -22,7 +22,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum by (application) (rate(http_server_requests_seconds_count[1m]))",
+              "expr": "sum by (application) (rate(http_server_requests_seconds_count[5m]))",
               "legendFormat": "{{ "{{" }}application{{ "}}" }}"
             }
           ]
@@ -35,7 +35,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum by (application) (rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"}[1m]))",
+              "expr": "sum by (application) (rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"}[5m]))",
               "legendFormat": "{{ "{{" }}application{{ "}}" }}"
             }
           ]
@@ -61,7 +61,7 @@ data:
           "datasource": { "type": "loki", "uid": "loki" },
           "targets": [
             {
-              "expr": "{namespace=\"cloudlite\"} | json"
+              "expr": "{namespace=\"cloudlite\", container=~\"s3|iam\"} | json"
             }
           ]
         }

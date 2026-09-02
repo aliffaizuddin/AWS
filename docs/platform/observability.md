@@ -48,9 +48,22 @@ interceptor, so needed no such change.
 A local k3d cluster (real k3s in Docker), the same sandbox stand-in used
 for every prior platform sub-project. Confirmed for real: Prometheus
 scrapes both services with real `up=1` targets; Grafana's datasources and
-dashboard render with zero manual configuration; Loki holds real,
-JSON-structured log lines shipped by Alloy; Prometheus's and Loki's PVCs
-are `bulk-hdd`-backed.
+dashboard *object* exist via the API and render with zero manual
+configuration; Loki holds real, JSON-structured log lines shipped by
+Alloy; Prometheus's and Loki's PVCs are `bulk-hdd`-backed; and — after
+the final-fix-wave re-verification that widened the dashboard's `[1m]`
+rate windows to `[5m]`, added `global.scrape_interval: 15s`, and inserted
+a `loki.process` / `stage.cri` step to strip the CRI log envelope ahead
+of Loki's `| json` parsing — each dashboard panel's *actual query* now
+also returns real, non-empty data against a live cluster: request-rate
+and error-rate `rate(...)` queries return non-null per-application
+series, the p99 `histogram_quantile` query returns a real value, and the
+Logs panel's `{namespace="cloudlite", container=~"s3|iam"} | json` query
+returns lines with successfully-parsed JSON fields (no `__error__`). See
+`.superpowers/sdd/2026-09-02-observability/final-fix-report.md` for the
+actual query responses. Earlier validation (through Task 8) had only
+confirmed the dashboard *object* existed, not that its panel queries
+returned data — that gap is what this fix wave closed.
 
 ## Known operational properties (not defects)
 
@@ -83,6 +96,34 @@ are `bulk-hdd`-backed.
   `.github/workflows/ci-helm.yml` was updated to run it; a human running
   `helm` locally needs `helm repo add prometheus-community ...` /
   `helm repo add grafana ...` first (see Global Constraints in the plan).
+  ArgoCD's own repo-server needs the same thing at sync time: it now
+  needs network egress to `prometheus-community.github.io` and
+  `grafana.github.io` to run `helm dependency build` during a sync,
+  which wasn't true before this sub-project (the pre-existing `s3`/`iam`
+  subcharts are vendored source, not remote deps).
+- **Loki's memcached sidecars OOM this project's target hardware:** the
+  Loki chart defaults `resultsCache.enabled`/`chunksCache.enabled` to
+  `true`, sizing both memcached sidecars for production HA (~11GB
+  combined) — far more than this project's actual 12GB bare-metal target
+  (`docs/architecture.md` §2, §8) can spare, and enough to OOM a
+  validation cluster in practice. Fixed by disabling both at the
+  `values.yaml` level (`loki.resultsCache.enabled: false` /
+  `loki.chunksCache.enabled: false`); SingleBinary mode works fine
+  without them at this project's scale.
+- **`loki.useTestSchema: true`:** used so this deployment doesn't need a
+  hand-authored schema config — it's upstream's own documented shortcut
+  for filesystem-storage deployments, and was verified (via rendered
+  output) to still resolve `object_store: filesystem`, not ephemeral
+  storage. It's marked test-only upstream, though, so a future chart
+  version bump should be checked against this still working as expected.
+- **`loki.test.enabled: false`:** disables the Loki chart's own bundled
+  `test`-hook Pod, for the same reason `grafana.testFramework.enabled` is
+  now also set to `false` (see the final-fix-wave report referenced
+  above): Helm skips a bare `test` hook on `install`/`upgrade`, but
+  ArgoCD does not recognize that hook type (only `pre/post-install`,
+  `pre/post-upgrade`, `post-delete`), so it would otherwise sync as an
+  ordinary always-present Pod/ServiceAccount/ConfigMap that can flip the
+  whole Application to Degraded if it ever exits non-zero.
 
 ## Out of scope
 

@@ -135,23 +135,42 @@ deploy loop).
 | IAM | Java | 0.75 vCPU · 768Mi |
 | Function runner | Go | 0.5 vCPU · 256Mi |
 | Postgres | — | 1 vCPU · 1Gi |
-| Prometheus | — | 6m · 244Mi |
-| Loki | — | 7m · 158Mi |
-| Alloy (DaemonSet) | — | 10m · 66Mi |
-| Grafana | — | 5m · 244Mi |
+| Prometheus | — | 400m · 512Mi |
+| Loki | — | 300m · 384Mi |
+| Alloy (DaemonSet) | — | 150m · 128Mi |
+| Grafana | — | 150m · 192Mi |
 | Web UI | — | 0.25 vCPU · 128Mi |
 | ArgoCD (trimmed: controller + repo-server + server + redis) | — | ~1.05 vCPU · ~1.2Gi |
 | Sealed Secrets controller | — | 100m · 128Mi |
-| **Total (limits, burst)** | | **~4.68 vCPU · ~5.2Gi** |
+| **Total (limits, burst)** | | **~5.65 vCPU · ~5.6Gi** |
 
 Requests (guaranteed, roughly half of limits) comfortably fit the ~3 core / 10Gi budget.
-Limits now run well past the "safe" 3-core line (~4.68 vCPU vs. ~3 available, roughly
-56% over) — still fine in practice, since limits are burst ceilings, not concurrent
+Limits now run well past the "safe" 3-core line (~5.65 vCPU vs. ~3 available, roughly
+88% over) — still fine in practice, since limits are burst ceilings, not concurrent
 guarantees, and none of these components (JVM services, ArgoCD, Sealed Secrets) sustain
-their full limit simultaneously in normal operation. The Prometheus, Loki, Alloy, and
-Grafana rows above are based on real `kubectl top` measurements from Task 7's k3d
-validation; actual usage is significantly lower than the configured resource limits
-(see `docs/platform/observability.md`). RAM has generous headroom either way.
+their full limit simultaneously in normal operation. RAM has generous headroom either
+way.
+
+**Measured vs. configured — Prometheus/Loki/Alloy/Grafana:** the four rows above use
+configured limits, consistent with every other row in the table (limits are what the
+scheduler admits and what a pod is allowed to burst to, not what it's using right now).
+For reference, real `kubectl top` measurements from Task 7's k3d validation showed
+actual usage well below those limits:
+
+| Pod | Measured (kubectl top) | Configured limit |
+|---|---|---|
+| Prometheus | 6m · 244Mi | 400m · 512Mi |
+| Loki | 7m · 158Mi | 300m · 384Mi |
+| Alloy (DaemonSet) | 10m · 66Mi | 150m · 128Mi |
+| Grafana | 5m · 244Mi | 150m · 192Mi |
+
+As with the "limits are burst ceilings, not concurrent-usage guarantees" framing above,
+this measured snapshot (from one lightly-loaded k3d validation cluster) is well below
+each component's configured limit — real usage is not a substitute for the limits
+table above when doing capacity planning, but it's useful context that the observability
+stack's actual footprint is currently much smaller than its configured ceiling. See
+`docs/platform/observability.md` for further known operational properties of this
+stack.
 
 **JVM-specific tuning notes:**
 - Set `-Xmx` explicitly to match container memory limits — the JVM has historically not

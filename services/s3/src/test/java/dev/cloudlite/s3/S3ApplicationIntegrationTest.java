@@ -198,6 +198,7 @@ class S3ApplicationIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("jvm_memory_used_bytes");
         assertThat(response.getBody()).contains("application=\"s3\"");
+        assertThat(response.getBody()).contains("http_server_requests_seconds_bucket");
     }
 
     @Test
