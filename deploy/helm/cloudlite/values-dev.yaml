@@ -6,3 +6,8 @@ postgres:
 s3:
   persistence:
     size: 2Gi
+
+prometheus:
+  server:
+    persistentVolume:
+      size: 2Gi
