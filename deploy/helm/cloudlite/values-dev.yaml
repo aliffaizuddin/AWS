@@ -16,12 +16,3 @@ loki:
   singleBinary:
     persistence:
       size: 2Gi
-  # The loki chart's default resultsCache/chunksCache memcached sidecars
-  # request ~1Gi/~8Gi respectively (production HA sizing) — on a
-  # single-node dev/k3d cluster that starves every other pod's scheduling.
-  # Disable them here; SingleBinary mode works fine without them for
-  # local validation.
-  resultsCache:
-    enabled: false
-  chunksCache:
-    enabled: false

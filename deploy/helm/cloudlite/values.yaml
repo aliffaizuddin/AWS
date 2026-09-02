@@ -74,6 +74,17 @@ loki:
     enabled: false
   lokiCanary:
     enabled: false
+  # The loki chart's default resultsCache/chunksCache memcached sidecars
+  # request ~1Gi/~8Gi respectively (production HA sizing for multi-tenant
+  # Loki at scale) — this project's real target is a single 12GB
+  # bare-metal node (docs/architecture.md §2, §8), so leaving these
+  # enabled would OOM a real deployment the same way it starved a k3d
+  # validation cluster. Disable them; SingleBinary mode works fine
+  # without them at this project's scale.
+  resultsCache:
+    enabled: false
+  chunksCache:
+    enabled: false
   test:
     enabled: false
   read:
