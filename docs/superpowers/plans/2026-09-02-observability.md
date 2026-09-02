@@ -976,14 +976,20 @@ git commit -m "feat(helm): add trimmed Grafana subchart with provisioned datasou
 
 ### Task 6: k3d cluster + sealed secrets + full-stack install
 
-**Files:** none (cluster operations only) — sets up the environment Task 7
-verifies against.
+**Files:**
+- Modify: `deploy/helm/cloudlite/templates/postgres/sealedsecret.yaml`
+  (re-sealed against this fresh cluster's key)
+- Modify: `deploy/helm/cloudlite/charts/iam/templates/sealedsecret.yaml`
+  (re-sealed against this fresh cluster's key)
+- Create: `deploy/helm/cloudlite/templates/grafana/sealedsecret.yaml`
 
 **Interfaces:**
 - Consumes: Tasks 1-5's complete umbrella chart.
 - Produces: a running k3d cluster with the full `cloudlite` release
   installed (Postgres, S3, IAM, Prometheus, Loki, Alloy, Grafana), all pods
-  Ready. Task 7 consumes this live cluster to verify actual behavior.
+  Ready, plus the three `SealedSecret` files above committed to git. Task 7
+  consumes this live cluster to verify actual behavior — same shell session,
+  so `$GRAFANA_ADMIN_PASSWORD` (Step 4) and `$TAG` (Step 5) stay in scope.
 
 - [ ] **Step 1: Create the k3d cluster**
 
@@ -1069,7 +1075,21 @@ echo "GRAFANA_ADMIN_PASSWORD=$GRAFANA_ADMIN_PASSWORD"
 Keep this shell session open through Task 7 — `$GRAFANA_ADMIN_PASSWORD` is
 used there to log into Grafana.
 
-- [ ] **Step 5: Build and import the S3 and IAM images**
+- [ ] **Step 5: Commit the re-sealed secrets**
+
+```bash
+git add deploy/helm/cloudlite/templates/postgres/sealedsecret.yaml \
+        deploy/helm/cloudlite/charts/iam/templates/sealedsecret.yaml \
+        deploy/helm/cloudlite/templates/grafana/sealedsecret.yaml
+git commit -m "chore(observability): re-seal secrets for the k3d validation cluster"
+```
+This is the same "re-seal on cluster change" operation
+`docs/platform/argocd.md` already documents for `postgres-credentials`/
+`iam-jwt-secret` — the ciphertext committed here is only valid for this
+specific k3d cluster's key, exactly like every prior sub-project's
+validation pass.
+
+- [ ] **Step 6: Build and import the S3 and IAM images**
 
 ```bash
 TAG=$(git rev-parse --short=7 HEAD)
@@ -1079,7 +1099,7 @@ k3d image import s3:$TAG iam:$TAG -c cloudlite-observability
 echo "Using tag: $TAG"
 ```
 
-- [ ] **Step 6: Build chart dependencies and install**
+- [ ] **Step 7: Build chart dependencies and install**
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -1091,7 +1111,7 @@ helm install cloudlite deploy/helm/cloudlite -n cloudlite --create-namespace \
   --set iam.image.tag=$TAG
 ```
 
-- [ ] **Step 7: Wait for every pod to be Ready**
+- [ ] **Step 8: Wait for every pod to be Ready**
 
 ```bash
 kubectl wait --for=condition=Ready pod -l app=s3 -n cloudlite --timeout=180s
