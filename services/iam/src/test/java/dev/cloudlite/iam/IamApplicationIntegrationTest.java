@@ -2,6 +2,8 @@ package dev.cloudlite.iam;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.cloudlite.iam.dto.AuthorizeResponse;
 import dev.cloudlite.iam.dto.CreatePolicyRequest;
 import dev.cloudlite.iam.dto.CreatedUserResponse;
@@ -13,8 +15,14 @@ import dev.cloudlite.iam.policy.PolicyDocument;
 import dev.cloudlite.iam.policy.PolicyStatement;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpEntity;
@@ -28,6 +36,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Testcontainers
+@AutoConfigureObservability
+@ExtendWith(OutputCaptureExtension.class)
 class IamApplicationIntegrationTest {
 
     @Container
@@ -36,6 +46,8 @@ class IamApplicationIntegrationTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    private static final Logger log = LoggerFactory.getLogger(IamApplicationIntegrationTest.class);
 
     @Test
     void healthzReturns200OnceTheAppIsUp() {
@@ -147,5 +159,29 @@ class IamApplicationIntegrationTest {
             AuthorizeResponse.class);
         assertThat(allowResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(allowResponse.getBody().decision()).isEqualTo("ALLOW");
+    }
+
+    @Test
+    void actuatorPrometheusIsReachableAndTagsMetricsByApplication() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/actuator/prometheus", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("jvm_memory_used_bytes");
+        assertThat(response.getBody()).contains("application=\"iam\"");
+    }
+
+    @Test
+    void logLinesAreJsonFormatted(CapturedOutput output) throws Exception {
+        log.info("json-logging-smoke-test-marker");
+
+        String jsonLine = output.getOut().lines()
+            .filter(line -> line.contains("json-logging-smoke-test-marker"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("marker line not found in captured output"));
+
+        JsonNode node = new ObjectMapper().readTree(jsonLine);
+        assertThat(node.get("message").asText()).isEqualTo("json-logging-smoke-test-marker");
+        assertThat(node.has("level")).isTrue();
+        assertThat(node.has("logger_name")).isTrue();
     }
 }
