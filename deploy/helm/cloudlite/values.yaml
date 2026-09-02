@@ -133,3 +133,23 @@ alloy:
       limits:
         cpu: 150m
         memory: 128Mi
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  sidecar:
+    datasources:
+      enabled: true
+    dashboards:
+      enabled: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      cpu: 150m
+      memory: 192Mi
