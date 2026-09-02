@@ -135,19 +135,23 @@ deploy loop).
 | IAM | Java | 0.75 vCPU · 768Mi |
 | Function runner | Go | 0.5 vCPU · 256Mi |
 | Postgres | — | 1 vCPU · 1Gi |
-| Monitoring (Prometheus+Grafana) | — | 0.75 vCPU · 768Mi |
+| Prometheus | — | 6m · 244Mi |
+| Loki | — | 7m · 158Mi |
+| Alloy (DaemonSet) | — | 10m · 66Mi |
+| Grafana | — | 5m · 244Mi |
 | Web UI | — | 0.25 vCPU · 128Mi |
 | ArgoCD (trimmed: controller + repo-server + server + redis) | — | ~1.05 vCPU · ~1.2Gi |
 | Sealed Secrets controller | — | 100m · 128Mi |
-| **Total (limits, burst)** | | **~5.4 vCPU · ~5.0Gi** |
+| **Total (limits, burst)** | | **~4.68 vCPU · ~5.2Gi** |
 
 Requests (guaranteed, roughly half of limits) comfortably fit the ~3 core / 10Gi budget.
-Limits now run well past the "safe" 3-core line (~5.4 vCPU vs. ~3 available, roughly
-80% over) — still fine in practice, since limits are burst ceilings, not concurrent
+Limits now run well past the "safe" 3-core line (~4.68 vCPU vs. ~3 available, roughly
+56% over) — still fine in practice, since limits are burst ceilings, not concurrent
 guarantees, and none of these components (JVM services, ArgoCD, Sealed Secrets) sustain
-their full limit simultaneously in normal operation. Worth re-measuring under real load
-once observability (Prometheus) lands, rather than treating this budget as final. RAM has
-generous headroom either way.
+their full limit simultaneously in normal operation. The Prometheus, Loki, Alloy, and
+Grafana rows above are based on real `kubectl top` measurements from Task 7's k3d
+validation; actual usage is significantly lower than the configured resource limits
+(see `docs/platform/observability.md`). RAM has generous headroom either way.
 
 **JVM-specific tuning notes:**
 - Set `-Xmx` explicitly to match container memory limits — the JVM has historically not
