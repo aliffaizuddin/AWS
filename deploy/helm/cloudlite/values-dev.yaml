@@ -11,3 +11,8 @@ prometheus:
   server:
     persistentVolume:
       size: 2Gi
+
+loki:
+  singleBinary:
+    persistence:
+      size: 2Gi
