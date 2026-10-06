@@ -125,6 +125,34 @@ returned data — that gap is what this fix wave closed.
   ordinary always-present Pod/ServiceAccount/ConfigMap that can flip the
   whole Application to Degraded if it ever exits non-zero.
 
+## Lazily-created counters (found by the chaos test)
+
+Micrometer only creates a counter series the first time its label set
+occurs — e.g. `http_server_requests_seconds_count{outcome="SERVER_ERROR",...}`
+appears on the first 500. If a burst of errors starts and ends between
+two scrapes (15s), Prometheus's first sample of the new series already
+holds the burst's full count, and `rate()`/`increase()` report 0 because
+they only measure change *between* samples. The chaos test's ~12s IAM
+outage was invisible on the original "Error rate" panel for this reason
+(see [`chaos.md`](chaos.md)).
+
+The panel now uses:
+
+```promql
+sum by (application) (
+    (X - X offset 1m)        # series that existed a minute ago: normal increase
+  or
+    (X unless X offset 1m)   # series new within the minute: whole value is new
+) / 60
+```
+
+with `X = http_server_requests_seconds_count{outcome="SERVER_ERROR"}`.
+A pod restart gets a new `pod` label, so a counter reset reads as a new
+series and is still counted correctly. Prometheus's
+`created-timestamp-zero-ingestion` feature would fix this generically,
+but the services' metrics endpoint doesn't expose `_created`
+timestamps, so it isn't usable here as-is.
+
 ## Out of scope
 
 Custom application metrics (e.g. an IAM allow/deny counter) — deferred,

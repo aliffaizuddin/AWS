@@ -35,7 +35,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "targets": [
             {
-              "expr": "sum by (application) (rate(http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"}[5m]))",
+              "expr": "sum by (application) ((http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"} - http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"} offset 1m) or (http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"} unless http_server_requests_seconds_count{outcome=\"SERVER_ERROR\"} offset 1m)) / 60",
               "legendFormat": "{{ "{{" }}application{{ "}}" }}"
             }
           ]
