@@ -79,12 +79,13 @@ All four scenarios PASS. Measured recovery: IAM kill → IAM healthy in
 11.4s and S3 serving again at 12.4s (never before IAM); S3 kill → 14.2s;
 Postgres kill → IAM 12.7s, S3 18.9s.
 
-- **S3 fails closed when IAM is down, but returns `500 InternalError`
-  instead of `503`.** `IamUnavailableException` has no dedicated handler
-  in `GlobalExceptionHandler`, so it falls through to the catch-all.
-  Correct behaviour, misleading status — to be fixed in a separate
-  `fix(s3)` PR. Requests that hit S3 while it is waiting on IAM's TCP
-  connect also time out client-side (`000`).
+- **S3 failed closed when IAM was down, but returned `500 InternalError`
+  instead of `503`.** `IamUnavailableException` had no dedicated handler
+  in `GlobalExceptionHandler`, so it fell through to the catch-all.
+  Fixed: S3 now returns `503 ServiceUnavailable` (retryable for S3
+  clients) and logs at WARN instead of an ERROR stack trace per request.
+  Requests that hit S3 while it is waiting on IAM's TCP connect also
+  time out client-side (`000`).
 - **An interrupted `PUT` leaves nothing behind.** S3 buffers the whole
   request body in memory before touching disk, so a kill mid-transfer can
   only leave the object absent; no `.tmp` files or orphaned blobs were

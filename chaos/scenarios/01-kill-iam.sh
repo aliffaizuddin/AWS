@@ -32,5 +32,5 @@ scenario_run() {
   check_fail_closed "$id" "$s3_parsed" "$iam_parsed"
   check_recovery "$id" "$s3_parsed" 120 s3
   check_recovery "$id" "$iam_parsed" 120 iam
-  record_result "$id" outage-status INFO "S3 returned $(kv outage_statuses <<<"$s3_parsed") while IAM was down (503 would be the accurate status for an unavailable dependency)"
+  record_result "$id" outage-status INFO "S3 returned $(kv outage_statuses <<<"$s3_parsed") while IAM was down (expected 503 ServiceUnavailable; 000 = request timed out client-side)"
 }

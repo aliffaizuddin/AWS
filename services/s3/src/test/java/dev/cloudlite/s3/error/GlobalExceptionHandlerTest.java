@@ -3,6 +3,7 @@ package dev.cloudlite.s3.error;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.cloudlite.s3.iamclient.IamAccessDeniedException;
+import dev.cloudlite.s3.iamclient.IamUnavailableException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -100,5 +101,16 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(response.getBody().getCode()).isEqualTo("InternalError");
         assertThat(response.getBody().getMessage()).doesNotContain("column");
+    }
+
+    @Test
+    void iamUnavailableMapsTo503ServiceUnavailable() {
+        IamUnavailableException ex = new IamUnavailableException(new RuntimeException("connection refused"));
+
+        ResponseEntity<S3ErrorResponse> response = handler.handleIamUnavailable(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody().getCode()).isEqualTo("ServiceUnavailable");
+        assertThat(response.getBody().getRequestId()).isNotBlank();
     }
 }
