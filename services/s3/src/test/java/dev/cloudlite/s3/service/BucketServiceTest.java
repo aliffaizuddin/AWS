@@ -2,7 +2,9 @@ package dev.cloudlite.s3.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -10,7 +12,10 @@ import dev.cloudlite.s3.domain.Bucket;
 import dev.cloudlite.s3.error.S3ApiException;
 import dev.cloudlite.s3.error.S3ErrorCode;
 import dev.cloudlite.s3.repository.BucketRepository;
+import dev.cloudlite.s3.domain.UploadStatus;
+import dev.cloudlite.s3.repository.MultipartUploadRepository;
 import dev.cloudlite.s3.repository.ObjectRepository;
+import org.mockito.InOrder;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,13 +25,15 @@ class BucketServiceTest {
 
     private BucketRepository buckets;
     private ObjectRepository objects;
+    private MultipartUploadRepository uploads;
     private BucketService service;
 
     @BeforeEach
     void setUp() {
         buckets = mock(BucketRepository.class);
         objects = mock(ObjectRepository.class);
-        service = new BucketService(buckets, objects);
+        uploads = mock(MultipartUploadRepository.class);
+        service = new BucketService(buckets, objects, uploads);
     }
 
     @Test
@@ -92,5 +99,27 @@ class BucketServiceTest {
         when(buckets.findAllByOrderByNameAsc()).thenReturn(List.of(new Bucket("alpha")));
 
         assertThat(service.list()).extracting(Bucket::getName).containsExactly("alpha");
+    }
+
+    @Test
+    void deleteRejectsWhileUploadsAreInProgress() {
+        when(buckets.existsById("photos")).thenReturn(true);
+        when(uploads.existsByBucketNameAndStatus("photos", UploadStatus.IN_PROGRESS)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete("photos"))
+            .isInstanceOf(S3ApiException.class)
+            .extracting("errorCode").isEqualTo(S3ErrorCode.BUCKET_NOT_EMPTY);
+        verify(buckets, never()).deleteById("photos");
+    }
+
+    @Test
+    void deletePurgesFinishedUploadRowsFirst() {
+        when(buckets.existsById("photos")).thenReturn(true);
+
+        service.delete("photos");
+
+        InOrder order = inOrder(uploads, buckets);
+        order.verify(uploads).deleteFinishedByBucketName("photos");
+        order.verify(buckets).deleteById("photos");
     }
 }

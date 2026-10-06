@@ -13,6 +13,15 @@ of scope-creeping").
 - Lifecycle policies (auto-expiry / storage tiering)
 - Server-side encryption
 - Event notifications beyond the single "object-created → function runner" trigger
+- Versioning, byte-range GET, and custom object tags (S3 Phases 2–3) — deferred
+  on 2026-10-06 when the MVP was defined as multipart + real-node deploy; neither
+  interview pitch needs them. Revisit if a target role emphasises S3 API breadth.
+- Pagination on ListParts / ListMultipartUploads (`max-parts`, `max-uploads`,
+  markers) — unneeded at this scale (≤10,000 parts fits one response).
+- Streaming request bodies to disk instead of buffering parts in memory — revisit
+  if parts larger than 100 MiB are needed.
+- Reconciler coordination for multiple S3 replicas (Postgres advisory lock) —
+  S3 is single-replica by design.
 
 - Full AWS-style bucket-name validation (DNS-safe charset, 3-63 character
   length limits, etc.). The Phase 1 design spec
@@ -47,8 +56,6 @@ of scope-creeping").
   node doesn't have. Revisit with a second node or a RAM upgrade.
 - Chaos: OOM-kill and disk-full scenarios — overlap with resource-limit
   tuning; revisit if a real OOM or full disk shows up in practice.
-- Chaos: multipart-upload crash consistency — revisit once S3 multipart
-  exists (`docs/services/s3.md`).
 
 ## Language strategy — out of scope for now
 
@@ -72,5 +79,3 @@ Reasons to actually pick one of these back up later:
 - **Before wiring in the real `aws` CLI / SDKs against this service for anything
   beyond ad-hoc testing** → enforce full AWS-style bucket-name validation
   (DNS-safe charset, 3-63 chars)
-- **S3 multipart upload lands** → extend chaos scenario 04 to kill S3
-  mid-multipart (between part uploads and during complete)

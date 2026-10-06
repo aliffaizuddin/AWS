@@ -10,7 +10,11 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -71,6 +75,62 @@ public class DiskBlobStore implements BlobStore {
             throw new BlobNotFoundException("storage: blob not found: " + id);
         } catch (IOException e) {
             throw new UncheckedIOException("storage: remove " + id, e);
+        }
+    }
+
+    // Restarts the reconciler's grace period for a blob that just became
+    // unreferenced. A missing blob is ignored.
+    @Override
+    public void touch(UUID id) {
+        try {
+            Files.setLastModifiedTime(pathFor(id), FileTime.from(Instant.now()));
+        } catch (NoSuchFileException e) {
+            // already gone
+        } catch (IOException e) {
+            throw new UncheckedIOException("storage: touch " + id, e);
+        }
+    }
+
+    @Override
+    public List<BlobEntry> entries() {
+        try (Stream<Path> files = Files.list(dataDir)) {
+            return files.filter(Files::isRegularFile).map(this::entryFor).toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("storage: list " + dataDir, e);
+        }
+    }
+
+    private BlobEntry entryFor(Path file) {
+        String name = file.getFileName().toString();
+        Instant modified;
+        try {
+            modified = Files.getLastModifiedTime(file).toInstant();
+        } catch (IOException e) {
+            modified = Instant.now(); // unreadable mtime: treat as fresh so GC never deletes it
+        }
+        boolean temp = name.endsWith(".tmp");
+        UUID id = null;
+        if (!temp) {
+            try {
+                UUID parsed = UUID.fromString(name);
+                id = parsed.toString().equals(name) ? parsed : null;
+            } catch (IllegalArgumentException e) {
+                id = null;
+            }
+        }
+        return new BlobEntry(name, id, temp, modified);
+    }
+
+    @Override
+    public void deleteEntry(String fileName) {
+        Path target = dataDir.resolve(fileName).normalize();
+        if (!dataDir.toAbsolutePath().normalize().equals(target.toAbsolutePath().getParent())) {
+            throw new IllegalArgumentException("storage: refusing to delete outside the data dir: " + fileName);
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException e) {
+            throw new UncheckedIOException("storage: delete entry " + fileName, e);
         }
     }
 

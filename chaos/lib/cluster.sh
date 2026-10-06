@@ -93,7 +93,7 @@ setup_identity() {
     name: $n,
     document: {statements: [{
       effect: "ALLOW",
-      actions: ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+      actions: ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts", "s3:ListBucketMultipartUploads"],
       resources: ["arn:cloudlite:s3:::\($b)", "arn:cloudlite:s3:::\($b)/*"]
     }]}
   }')
@@ -153,6 +153,47 @@ check_objects() {
   fi
 }
 
+# mp_create <key> <token> — prints the new uploadId.
+mp_create() {
+  echo "$1" >> "$RUN_DIR/keys"
+  client_curl -X POST "$S3_URL/$CHAOS_BUCKET/$1?uploads" -H "Authorization: Bearer $2" | xml_value UploadId
+}
+
+# mp_put_part <key> <uploadId> <n> <file-in-pod> <token> [extra curl args...] — prints "<status> <etag>".
+mp_put_part() {
+  local key=$1 id=$2 n=$3 file=$4 token=$5
+  shift 5
+  # shellcheck disable=SC2016 # expanded by sh inside the pod
+  client_sh '
+    url=$1; f=$2; tok=$3; shift 3
+    h=$(mktemp)
+    c=$(curl -s -o /dev/null -D "$h" -w "%{http_code}" -T "$f" -H "Authorization: Bearer $tok" "$@" "$url")
+    e=$(grep -i "^etag:" "$h" | tr -d "\r\"" | cut -d" " -f2)
+    rm -f "$h"
+    echo "$c ${e:--}"' "$S3_URL/$CHAOS_BUCKET/$key?partNumber=$n&uploadId=$id" "$file" "$token" "$@"
+}
+
+# mp_complete <key> <uploadId> <xml body> <token> — prints "<status> <etag>".
+mp_complete() {
+  # shellcheck disable=SC2016 # expanded by sh inside the pod
+  client_sh '
+    b=$(mktemp)
+    c=$(curl -s -o "$b" -w "%{http_code}" --max-time 30 -X POST --data-binary "$3" -H "Authorization: Bearer $4" "$1")
+    e=$(sed -n "s:.*<ETag>\"*\([^<\"]*\)\"*</ETag>.*:\1:p" "$b")
+    rm -f "$b"
+    echo "$c ${e:--}"' "$S3_URL/$CHAOS_BUCKET/$1?uploadId=$2" "$1" "$3" "$4"
+}
+
+# mp_list_uploads <token> — "<key> <uploadId>" lines for in-progress uploads.
+mp_list_uploads() {
+  client_curl "$S3_URL/$CHAOS_BUCKET?uploads" -H "Authorization: Bearer $1" | xml_uploads
+}
+
+# mp_list_parts <key> <uploadId> <token> — raw ListPartsResult XML.
+mp_list_parts() {
+  client_curl "$S3_URL/$CHAOS_BUCKET/$1?uploadId=$2" -H "Authorization: Bearer $3"
+}
+
 # In-pod probe loop. Args: timeout_s, stable_run, url, then extra curl args.
 # Prints one HTTP status per request (timestamped on the host by
 # stamp_lines); exits once a failure has been seen followed by stable_run
@@ -184,7 +225,8 @@ probe_until_recovered() {
 blob_audit() {
   local files ids tmp orphans
   files=$(kc exec deploy/s3 -- ls -1 /data </dev/null)
-  ids=$(kc exec statefulset/postgres -- psql -U cloudlite -d cloudlite -tAc 'select storage_id from objects' </dev/null | sort)
+  ids=$(kc exec statefulset/postgres -- psql -U cloudlite -d cloudlite -tAc \
+    'select storage_id from objects where storage_id is not null union select storage_id from upload_parts' </dev/null | sort)
   tmp=$(grep -c '\.tmp$' <<<"$files" || true)
   orphans=$(grep -E '^[0-9a-f-]{36}$' <<<"$files" | sort | comm -23 - <(echo "$ids") | grep -c . || true)
   echo "tmp=$tmp orphans=$orphans"
@@ -194,10 +236,14 @@ kill_pod() { kc delete pod -l "app=$1" --wait=false >/dev/null; }
 
 teardown() {
   set +e
-  local tok key
+  local tok key uid
   if [[ -n ${CHAOS_API_KEY:-} ]] && kc get pod "$CLIENT_POD" >/dev/null 2>&1; then
     tok=$(iam_token 2>/dev/null)
     if [[ -n $tok && $tok != null ]]; then
+      while read -r key uid; do
+        [[ -n $uid ]] && client_curl -X DELETE -o /dev/null -H "Authorization: Bearer $tok" \
+          "$S3_URL/$CHAOS_BUCKET/$key?uploadId=$uid" 2>/dev/null
+      done < <(mp_list_uploads "$tok" 2>/dev/null)
       while read -r key; do
         client_curl -X DELETE -o /dev/null -H "Authorization: Bearer $tok" "$S3_URL/$CHAOS_BUCKET/$key" 2>/dev/null
       done < <(sort -u "$RUN_DIR/keys" 2>/dev/null)

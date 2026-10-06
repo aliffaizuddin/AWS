@@ -26,8 +26,11 @@ public class ObjectMetadata {
     @Column(nullable = false)
     private String etag;
 
-    @Column(name = "storage_id", nullable = false)
+    @Column(name = "storage_id")
     private UUID storageId;
+
+    @Column(name = "upload_id")
+    private UUID uploadId;
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -43,6 +46,13 @@ public class ObjectMetadata {
         this.etag = etag;
         this.storageId = storageId;
         this.createdAt = OffsetDateTime.now();
+    }
+
+    public static ObjectMetadata multipart(String bucketName, String key, String contentType,
+                                           long sizeBytes, String etag, UUID uploadId) {
+        ObjectMetadata m = new ObjectMetadata(bucketName, key, contentType, sizeBytes, etag, null);
+        m.uploadId = uploadId;
+        return m;
     }
 
     public ObjectMetadataId getId() {
@@ -71,6 +81,14 @@ public class ObjectMetadata {
 
     public UUID getStorageId() {
         return storageId;
+    }
+
+    public UUID getUploadId() {
+        return uploadId;
+    }
+
+    public boolean isMultipart() {
+        return uploadId != null;
     }
 
     public OffsetDateTime getCreatedAt() {

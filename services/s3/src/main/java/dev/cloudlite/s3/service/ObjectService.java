@@ -5,13 +5,17 @@ import dev.cloudlite.s3.domain.ObjectMetadataId;
 import dev.cloudlite.s3.error.S3ApiException;
 import dev.cloudlite.s3.error.S3ErrorCode;
 import dev.cloudlite.s3.repository.BucketRepository;
+import dev.cloudlite.s3.domain.UploadPart;
 import dev.cloudlite.s3.repository.ObjectRepository;
+import dev.cloudlite.s3.repository.UploadPartRepository;
 import dev.cloudlite.s3.storage.BlobStore;
+import dev.cloudlite.s3.util.Md5;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import java.io.SequenceInputStream;
+import java.util.Enumeration;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -26,12 +30,17 @@ public class ObjectService {
 
     private final BucketRepository buckets;
     private final ObjectRepository objects;
+    private final UploadPartRepository parts;
     private final BlobStore store;
+    private final UploadCleaner cleaner;
 
-    public ObjectService(BucketRepository buckets, ObjectRepository objects, BlobStore store) {
+    public ObjectService(BucketRepository buckets, ObjectRepository objects, UploadPartRepository parts,
+                         BlobStore store, UploadCleaner cleaner) {
         this.buckets = buckets;
         this.objects = objects;
+        this.parts = parts;
         this.store = store;
+        this.cleaner = cleaner;
     }
 
     public long maxObjectSize() {
@@ -45,7 +54,7 @@ public class ObjectService {
 
         Optional<ObjectMetadata> existing = objects.findById(new ObjectMetadataId(bucket, key));
 
-        String etag = md5Hex(body);
+        String etag = Md5.hex(body);
         UUID storageId = UUID.randomUUID();
         store.put(storageId, new ByteArrayInputStream(body));
 
@@ -61,13 +70,7 @@ public class ObjectService {
             throw e;
         }
 
-        existing.ifPresent(old -> {
-            try {
-                store.delete(old.getStorageId());
-            } catch (RuntimeException e) {
-                log.warn("s3: put object {}/{}: failed to delete superseded blob {}", bucket, key, old.getStorageId(), e);
-            }
-        });
+        existing.ifPresent(this::discardBacking);
 
         return etag;
     }
@@ -78,7 +81,27 @@ public class ObjectService {
     }
 
     public InputStream getBlob(ObjectMetadata metadata) {
-        return store.get(metadata.getStorageId());
+        if (!metadata.isMultipart()) {
+            return store.get(metadata.getStorageId());
+        }
+        List<UploadPart> manifest = parts.findByIdUploadIdOrderByIdPartNumberAsc(metadata.getUploadId());
+        if (manifest.isEmpty()) {
+            // Deleted or overwritten between the metadata read and here.
+            throw new S3ApiException(S3ErrorCode.NO_SUCH_KEY, metadata.getKey());
+        }
+        Iterator<UploadPart> remaining = manifest.iterator();
+        // Opens each part only when the previous one is exhausted, so at most one file is open.
+        return new SequenceInputStream(new Enumeration<>() {
+            @Override
+            public boolean hasMoreElements() {
+                return remaining.hasNext();
+            }
+
+            @Override
+            public InputStream nextElement() {
+                return store.get(remaining.next().getStorageId());
+            }
+        });
     }
 
     public Optional<ObjectMetadata> find(String bucket, String key) {
@@ -92,20 +115,19 @@ public class ObjectService {
             return;
         }
         objects.deleteById(id);
-        try {
-            store.delete(existing.get().getStorageId());
-        } catch (RuntimeException e) {
-            log.warn("s3: delete object {}/{}: blob {} delete failed after metadata delete, blob is orphaned",
-                bucket, key, existing.get().getStorageId(), e);
-        }
+        discardBacking(existing.get());
     }
 
-    private static String md5Hex(byte[] data) {
+    private void discardBacking(ObjectMetadata old) {
+        if (old.isMultipart()) {
+            cleaner.discardQuietly(old.getUploadId());
+            return;
+        }
         try {
-            MessageDigest digest = MessageDigest.getInstance("MD5");
-            return HexFormat.of().formatHex(digest.digest(data));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("MD5 not available", e);
+            store.delete(old.getStorageId());
+        } catch (RuntimeException e) {
+            log.warn("s3: object {}/{}: failed to delete superseded blob {}, leaving it to the reconciler",
+                old.getBucketName(), old.getKey(), old.getStorageId(), e);
         }
     }
 }

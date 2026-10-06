@@ -92,40 +92,65 @@ test_check_recovery_fails_when_probe_never_ran() {
   assert_eq FAIL "$(scenario_status 05)" "recovery: a probe with no samples is a FAIL, not a WARN"
 }
 
-_parsed() {  # _parsed <samples> <outage_seen> <recovered> <recovery_ms> <flap>
-  printf 'samples=%s\noutage_seen=%s\nrecovered=%s\nrecovery_ms=%s\nflap_2xx=%s\noutage_statuses=500\n' "$@"
+_parsed() {  # _parsed <samples> <outage_seen> <recovered> <recovery_ms> <flap> [down_until_ms]
+  printf 'samples=%s\noutage_seen=%s\nrecovered=%s\nrecovery_ms=%s\nflap_2xx=%s\noutage_statuses=500\ndown_until_ms=%s\n' \
+    "$1" "$2" "$3" "$4" "$5" "${6:--}"
 }
 
-test_check_fail_closed_passes_when_s3_recovers_after_iam() {
+test_check_fail_closed_passes_when_s3_recovers_after_iam_was_last_seen_down() {
   _fresh_run_dir
-  check_fail_closed 01 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes yes 12000 0)"
-  assert_eq PASS "$(scenario_status 01)" "fail-closed: S3 back after IAM passes"
+  check_fail_closed 01 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes yes 13500 0 12000)"
+  assert_eq PASS "$(scenario_status 01)" "fail-closed: S3 back after IAM's last observed refusal passes"
 }
 
-test_check_fail_closed_fails_when_s3_recovers_before_iam() {
+test_check_fail_closed_fails_when_s3_serves_while_iam_refuses() {
   _fresh_run_dir
-  check_fail_closed 01 "$(_parsed 40 yes yes 3000 0)" "$(_parsed 40 yes yes 12000 0)"
-  assert_eq FAIL "$(scenario_status 01)" "fail-closed: stable 2xx while IAM still down is a fail-open"
+  check_fail_closed 01 "$(_parsed 40 yes yes 3000 0)" "$(_parsed 40 yes yes 12500 0 12000)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: stable 2xx while IAM still refusing is a fail-open"
 }
 
 test_check_fail_closed_tolerates_probe_skew() {
   _fresh_run_dir
-  check_fail_closed 01 "$(_parsed 40 yes yes 11700 0)" "$(_parsed 40 yes yes 12000 0)"
+  check_fail_closed 01 "$(_parsed 40 yes yes 11700 0)" "$(_parsed 40 yes yes 12500 0 12000)"
   assert_eq PASS "$(scenario_status 01)" "fail-closed: under 500ms of probe skew is tolerated"
+}
+
+test_check_fail_closed_ignores_iam_probe_blind_spots() {
+  # Live run 20261006-074606: IAM's probe hung 2s on a dead endpoint, so its
+  # first 2xx (13.0s) lagged S3's (11.6s); IAM was last seen refusing at 10.6s.
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 60 yes yes 11600 0)" "$(_parsed 60 yes yes 13000 0 10600)"
+  assert_eq PASS "$(scenario_status 01)" "fail-closed: a timed-out IAM sample is not evidence IAM was down"
 }
 
 test_check_fail_closed_fails_on_flapping_or_no_outage() {
   _fresh_run_dir
-  check_fail_closed 01 "$(_parsed 40 yes yes 13000 2)" "$(_parsed 40 yes yes 12000 0)"
-  check_fail_closed 02 "$(_parsed 40 no - - 0)" "$(_parsed 40 yes yes 12000 0)"
+  check_fail_closed 01 "$(_parsed 40 yes yes 13000 2)" "$(_parsed 40 yes yes 12000 0 11000)"
+  check_fail_closed 02 "$(_parsed 40 no - - 0)" "$(_parsed 40 yes yes 12000 0 11000)"
   assert_eq FAIL "$(scenario_status 01)" "fail-closed: 2xx mid-outage fails"
   assert_eq FAIL "$(scenario_status 02)" "fail-closed: no S3 outage at all fails"
 }
 
-test_check_fail_closed_fails_when_unprovable() {
+test_check_fail_closed_fails_when_s3_serves_during_an_iam_timeout_phase() {
+  # IAM refused until 10s, then only timed out until it came back at 20s; an S3
+  # that fails open on IAM timeouts would be back at 11s.
   _fresh_run_dir
-  check_fail_closed 01 "$(_parsed 0 no - - 0)" "$(_parsed 40 yes yes 12000 0)"
-  check_fail_closed 02 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes no - 0)"
+  check_fail_closed 01 "$(_parsed 80 yes yes 11000 0)" "$(_parsed 80 yes yes 20000 0 10000)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: 2xx during IAM's timeout phase is a fail-open"
+}
+
+test_check_fail_closed_uses_iam_recovery_when_only_timeouts_seen() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 3000 0)" "$(_parsed 40 yes yes 12000 0 -)"
+  check_fail_closed 02 "$(_parsed 40 yes yes 11000 0)" "$(_parsed 40 yes yes 12000 0 -)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: judged against IAM recovery minus probe timeout"
+  assert_eq PASS "$(scenario_status 02)" "fail-closed: within IAM's last probe window passes"
+}
+
+test_check_fail_closed_unjudgeable_or_unrun() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 0 no - - 0)" "$(_parsed 40 yes yes 12000 0 11000)"
+  check_fail_closed 02 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes no - 0 -)"
   assert_eq FAIL "$(scenario_status 01)" "fail-closed: S3 probe never ran"
-  assert_eq FAIL "$(scenario_status 02)" "fail-closed: IAM never seen healthy again, can't prove S3 waited"
+  assert_eq WARN "$(scenario_status 02)" "fail-closed: IAM neither seen refusing nor recovered can't be judged"
 }

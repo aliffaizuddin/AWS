@@ -7,7 +7,7 @@ recovery, checks correctness, and writes a Markdown report. See
 for what was built and
 [`../superpowers/specs/2026-10-06-chaos-test-design.md`](../superpowers/specs/2026-10-06-chaos-test-design.md)
 for the design. First full run:
-[`../../chaos/reports/2026-10-06-033601-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-033601-k3d-cloudlite-test.md).
+[`../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md).
 
 ## Scope
 
@@ -17,10 +17,11 @@ availability.
 
 | # | Inject | Measure | Pass if |
 |---|---|---|---|
-| 01 Kill IAM | probe S3 `GET` and IAM `/healthz` every 250ms, delete the IAM pod | recovery time for S3 and IAM | fail-closed: no 2xx after S3's first error, and S3 serves stable 2xx no earlier than IAM is healthy again (500ms probe-skew tolerance); recovery < 120s |
+| 01 Kill IAM | probe S3 `GET` and IAM `/healthz` every 250ms, delete the IAM pod | recovery time for S3 and IAM | fail-closed: no 2xx after S3's first error, and S3 serves stable 2xx no earlier than IAM was known down — the later of IAM's last fast refusal and (IAM's first stable 2xx − the 2s probe timeout), 500ms tolerance; WARN if neither is known; recovery < 120s |
 | 02 Kill S3 | seed 10 × 64 KiB objects, probe `GET`, delete the S3 pod | recovery time | recovery < 120s; all 10 objects read back with identical sha256 |
 | 03 Kill Postgres | same seed; probe S3 `GET` and IAM `/auth/token` concurrently, delete `postgres-0` | recovery time for S3 and IAM separately | both < 180s; objects intact; the test user's API key still mints a token that is still authorized |
 | 04 Kill S3 mid-PUT | 80 MiB `PUT` throttled with `curl --limit-rate 4M`, delete the S3 pod ~2s in | — | object afterwards is absent or byte-identical (never partial); retried `PUT` succeeds; leftover `.tmp` files / orphaned blobs reported (WARN, not FAIL) |
+| 05 Kill S3 mid-multipart | upload parts 1–2 (5 MiB), kill S3 during part 3; later kill S3 right after firing a complete | — | the upload is rediscovered via ListMultipartUploads; parts 1–2 survive with their ETags; the resumed upload completes with the expected multipart ETag and byte-identical content; a complete interrupted by the kill can be retried and returns the same ETag |
 
 "Recovered" means the first of 5 consecutive 2xx responses after the
 outage began.
@@ -101,6 +102,28 @@ Postgres kill → IAM 12.7s, S3 18.9s.
   failure. Fixed by changing the panel's query to treat a series that
   is new within the window as starting from zero (see
   [`observability.md`](observability.md), "Lazily-created counters").
+
+### Multipart run (2026-10-06, k3d)
+
+All five scenarios PASS
+([report](../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md)).
+Scenario 05 found a real bug on its first run: **complete returned
+`MalformedXML` for `curl`'s default form-encoded body**, because any
+`getParameter()` call (Spring's `params` routing condition, the auth
+interceptor) makes Tomcat parse a form-encoded POST body into
+parameters, leaving the controller nothing to read. Unit tests missed it
+— MockMvc never parses bodies. Fixed by routing POST and checking
+multipart parameters from the raw query string; pinned by a real-Tomcat
+integration test.
+
+The same run also exposed a **measurement flaw in 01's fail-closed
+check**: the IAM probe is sequential with a 2s timeout, so one request
+routed to the terminating IAM pod blinded it for ~2s, and IAM's first
+2xx lagged S3's. A timed-out sample says nothing about IAM; a fast
+refusal proves it was down, and so does the gap before IAM's first 2xx
+minus one probe timeout. The check now orders S3's recovery against the
+later of those two (`down_until_ms`, and recovery − 2s) instead of IAM's
+first success — so a fail-open during an IAM timeout phase still FAILs.
 
 ## Known limitations
 

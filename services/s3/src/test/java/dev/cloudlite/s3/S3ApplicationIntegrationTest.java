@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -218,5 +221,100 @@ class S3ApplicationIntegrationTest {
 
     private static String stripQuotes(String etag) {
         return etag.replace("\"", "");
+    }
+
+    private static String xmlValue(String xml, String tag) {
+        Matcher m = Pattern.compile("<" + tag + ">([^<]*)</" + tag + ">").matcher(xml);
+        return m.find() ? m.group(1) : null;
+    }
+
+    private String startUpload(String bucket, String key) {
+        ResponseEntity<String> r = restTemplate.postForEntity("/" + bucket + "/" + key + "?uploads", null, String.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return xmlValue(r.getBody(), "UploadId");
+    }
+
+    private String putPart(String bucket, String key, String uploadId, int n, byte[] body) {
+        ResponseEntity<Void> r = restTemplate.exchange(
+            "/" + bucket + "/" + key + "?partNumber=" + n + "&uploadId=" + uploadId,
+            HttpMethod.PUT, new HttpEntity<>(body), Void.class);
+        assertThat(r.getStatusCode()).isEqualTo(HttpStatus.OK);
+        return r.getHeaders().getETag();
+    }
+
+    @Test
+    void multipartRoundTripReturnsTheConcatenatedBytes() {
+        restTemplate.put("/mp-bucket", null);
+        byte[] p1 = new byte[5 * 1024 * 1024];
+        Arrays.fill(p1, (byte) 'a');
+        byte[] p2 = "tail".getBytes(StandardCharsets.UTF_8);
+        String id = startUpload("mp-bucket", "dir/big.bin");
+        String e1 = putPart("mp-bucket", "dir/big.bin", id, 1, p1);
+        String e2 = putPart("mp-bucket", "dir/big.bin", id, 2, p2);
+
+        String listed = restTemplate.getForObject("/mp-bucket?uploads", String.class);
+        assertThat(listed).contains(id);
+        String parts = restTemplate.getForObject("/mp-bucket/dir/big.bin?uploadId=" + id, String.class);
+        assertThat(parts).contains("<PartNumber>1</PartNumber>").contains("<PartNumber>2</PartNumber>");
+
+        String body = "<CompleteMultipartUpload>"
+            + "<Part><PartNumber>1</PartNumber><ETag>" + e1 + "</ETag></Part>"
+            + "<Part><PartNumber>2</PartNumber><ETag>" + e2 + "</ETag></Part></CompleteMultipartUpload>";
+        ResponseEntity<String> done = restTemplate.postForEntity("/mp-bucket/dir/big.bin?uploadId=" + id, body, String.class);
+        assertThat(done.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(xmlValue(done.getBody(), "ETag")).endsWith("-2\"");
+
+        ResponseEntity<String> again = restTemplate.postForEntity("/mp-bucket/dir/big.bin?uploadId=" + id, body, String.class);
+        assertThat(again.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(xmlValue(again.getBody(), "ETag")).isEqualTo(xmlValue(done.getBody(), "ETag"));
+
+        ResponseEntity<byte[]> got = restTemplate.getForEntity("/mp-bucket/dir/big.bin", byte[].class);
+        assertThat(got.getStatusCode()).isEqualTo(HttpStatus.OK);
+        byte[] expected = new byte[p1.length + p2.length];
+        System.arraycopy(p1, 0, expected, 0, p1.length);
+        System.arraycopy(p2, 0, expected, p1.length, p2.length);
+        assertThat(got.getBody()).isEqualTo(expected);
+
+        restTemplate.delete("/mp-bucket/dir/big.bin");
+        restTemplate.delete("/mp-bucket");
+        assertThat(restTemplate.exchange("/mp-bucket", HttpMethod.HEAD, null, Void.class).getStatusCode())
+            .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void abortedUploadDoesNotBlockBucketDelete() {
+        restTemplate.put("/abort-bucket", null);
+        String id = startUpload("abort-bucket", "k");
+        putPart("abort-bucket", "k", id, 1, "x".getBytes(StandardCharsets.UTF_8));
+
+        ResponseEntity<String> blocked = restTemplate.exchange("/abort-bucket", HttpMethod.DELETE, null, String.class);
+        assertThat(blocked.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
+        restTemplate.delete("/abort-bucket/k?uploadId=" + id);
+        ResponseEntity<String> gone = restTemplate.exchange("/abort-bucket/k?uploadId=" + id, HttpMethod.GET, null, String.class);
+        assertThat(gone.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        ResponseEntity<String> deleted = restTemplate.exchange("/abort-bucket", HttpMethod.DELETE, null, String.class);
+        assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    }
+
+    // curl -d sends application/x-www-form-urlencoded; Tomcat parses such a body
+    // into request parameters if anything asks for them, leaving the controller
+    // an empty body. The complete must still work.
+    @Test
+    void completeWorksWhenTheBodyIsSentFormEncoded() {
+        restTemplate.put("/form-bucket", null);
+        String id = startUpload("form-bucket", "k");
+        String e1 = putPart("form-bucket", "k", id, 1, "only".getBytes(StandardCharsets.UTF_8));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        String body = "<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>" + e1
+            + "</ETag></Part></CompleteMultipartUpload>";
+
+        ResponseEntity<String> done = restTemplate.postForEntity(
+            "/form-bucket/k?uploadId=" + id, new HttpEntity<>(body, headers), String.class);
+
+        assertThat(done.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(xmlValue(done.getBody(), "ETag")).endsWith("-1\"");
     }
 }
