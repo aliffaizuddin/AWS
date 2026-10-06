@@ -33,6 +33,11 @@ spring:
 
 s3:
   data-dir: ${S3_DATA_DIR:/data}
+  multipart:
+    ttl: ${S3_MULTIPART_TTL:24h}
+  reconcile:
+    interval: ${S3_RECONCILE_INTERVAL:10m}
+    grace: ${S3_RECONCILE_GRACE:1h}
 
 iam:
   base-url: ${IAM_BASE_URL:http://localhost:8081}
