@@ -39,3 +39,8 @@ test_run_help_from_other_cwd() {
   out=$(cd /tmp && bash "$CHAOS_DIR/run.sh" --help)
   assert_contains "$out" "Usage:" "help works from any cwd"
 }
+
+test_parse_args_selects_named_scenario() {
+  parse_args 01
+  assert_eq "01" "${SELECTED[*]}" "args: explicit id selects only that scenario"
+}
