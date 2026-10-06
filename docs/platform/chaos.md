@@ -7,7 +7,7 @@ recovery, checks correctness, and writes a Markdown report. See
 for what was built and
 [`../superpowers/specs/2026-10-06-chaos-test-design.md`](../superpowers/specs/2026-10-06-chaos-test-design.md)
 for the design. First full run:
-[`../../chaos/reports/2026-10-06-075307-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-075307-k3d-cloudlite-test.md).
+[`../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md).
 
 ## Scope
 
@@ -106,7 +106,7 @@ Postgres kill → IAM 12.7s, S3 18.9s.
 ### Multipart run (2026-10-06, k3d)
 
 All five scenarios PASS
-([report](../../chaos/reports/2026-10-06-075307-k3d-cloudlite-test.md)).
+([report](../../chaos/reports/2026-10-06-080820-k3d-cloudlite-test.md)).
 Scenario 05 found a real bug on its first run: **complete returned
 `MalformedXML` for `curl`'s default form-encoded body**, because any
 `getParameter()` call (Spring's `params` routing condition, the auth
