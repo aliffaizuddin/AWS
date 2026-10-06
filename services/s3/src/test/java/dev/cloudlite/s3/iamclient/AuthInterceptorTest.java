@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.xpath;
 
 import dev.cloudlite.s3.controller.BucketController;
 import dev.cloudlite.s3.controller.HealthController;
@@ -152,12 +153,13 @@ class AuthInterceptorTest {
     }
 
     @Test
-    void iamUnavailableReturns500() throws Exception {
+    void iamUnavailableReturns503() throws Exception {
         doThrow(new IamUnavailableException(new RuntimeException("connection refused")))
             .when(iamClient).authorize("Bearer good-token", "s3:CreateBucket", "arn:cloudlite:s3:::photos");
 
         mockMvc.perform(put("/photos").header("Authorization", "Bearer good-token"))
-            .andExpect(status().isInternalServerError());
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(xpath("/Error/Code").string("ServiceUnavailable"));
     }
 
     @Test

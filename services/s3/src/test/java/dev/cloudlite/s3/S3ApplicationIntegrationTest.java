@@ -180,13 +180,13 @@ class S3ApplicationIntegrationTest {
     }
 
     @Test
-    void authorizeReturns500WhenIamIsUnavailable() {
+    void requestIsRejectedWith503WhenIamIsUnavailable() {
         stubStatusCode = 500;
 
         ResponseEntity<String> response = restTemplate.getForEntity("/", String.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
-        assertThat(response.getBody()).contains("InternalError");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).contains("ServiceUnavailable");
     }
 
     @Test

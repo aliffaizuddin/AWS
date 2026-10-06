@@ -2,6 +2,7 @@ package dev.cloudlite.s3.error;
 
 import java.util.UUID;
 import dev.cloudlite.s3.iamclient.IamAccessDeniedException;
+import dev.cloudlite.s3.iamclient.IamUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -49,6 +50,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<S3ErrorResponse> handleIamAccessDenied(IamAccessDeniedException ex) {
         log.debug("s3: access denied - {}", ex.getMessage());
         return errorResponse(S3ErrorCode.ACCESS_DENIED, "");
+    }
+
+    // Fail closed: the request is rejected, and 503 tells the client the
+    // dependency is down and a retry may succeed (AWS's ServiceUnavailable).
+    @ExceptionHandler(IamUnavailableException.class)
+    public ResponseEntity<S3ErrorResponse> handleIamUnavailable(IamUnavailableException ex) {
+        log.warn("s3: IAM unavailable, rejecting request - {}", ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage());
+        return errorResponse(S3ErrorCode.SERVICE_UNAVAILABLE, "");
     }
 
     @ExceptionHandler(Exception.class)
