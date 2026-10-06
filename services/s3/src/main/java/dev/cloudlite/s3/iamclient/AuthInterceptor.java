@@ -32,8 +32,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         String bucket = pathVariables != null ? pathVariables.get("bucket") : null;
         String key = pathVariables != null ? pathVariables.get("key") : null;
         String method = request.getMethod();
-        boolean uploadsParam = request.getParameter("uploads") != null;
-        boolean uploadIdParam = request.getParameter("uploadId") != null;
+        boolean uploadsParam = request.getParameterMap().containsKey("uploads");
+        boolean uploadIdParam = request.getParameterMap().containsKey("uploadId");
 
         String action;
         String resource;
