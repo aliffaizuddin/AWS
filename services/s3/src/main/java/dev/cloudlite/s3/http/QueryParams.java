@@ -31,7 +31,13 @@ public final class QueryParams {
         return null;
     }
 
+    // A malformed escape (e.g. "%zz") is compared literally rather than
+    // failing: this runs on every request via the auth interceptor.
     private static String decode(String s) {
-        return URLDecoder.decode(s, StandardCharsets.UTF_8);
+        try {
+            return URLDecoder.decode(s, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            return s;
+        }
     }
 }

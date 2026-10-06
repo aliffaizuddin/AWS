@@ -21,4 +21,11 @@ class QueryParamsTest {
         assertThat(QueryParams.get("x=1", "uploadId")).isNull();
         assertThat(QueryParams.get(null, "uploadId")).isNull();
     }
+
+    @Test
+    void malformedPercentEncodingIsTreatedLiterallyNotAsAnError() {
+        assertThat(QueryParams.has("%zz&uploads", "uploads")).isTrue();
+        assertThat(QueryParams.has("%zz", "uploads")).isFalse();
+        assertThat(QueryParams.get("uploadId=%zz", "uploadId")).isEqualTo("%zz");
+    }
 }
