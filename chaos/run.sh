@@ -6,6 +6,7 @@ set -euo pipefail
 CHAOS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$CHAOS_DIR/lib/probe.sh"
 source "$CHAOS_DIR/lib/report.sh"
+source "$CHAOS_DIR/lib/s3xml.sh"
 source "$CHAOS_DIR/lib/cluster.sh"
 
 usage() {
