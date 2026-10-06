@@ -64,4 +64,35 @@ class DiskBlobStoreTest {
 
         assertThatThrownBy(() -> store.get(id)).isInstanceOf(BlobNotFoundException.class);
     }
+
+    @Test
+    void entriesClassifyBlobsTempFilesAndStrangers() throws Exception {
+        DiskBlobStore store = new DiskBlobStore(tempDir.toString());
+        UUID id = UUID.randomUUID();
+        store.put(id, new java.io.ByteArrayInputStream("x".getBytes()));
+        java.nio.file.Files.writeString(tempDir.resolve(UUID.randomUUID() + "." + UUID.randomUUID() + ".tmp"), "t");
+        java.nio.file.Files.writeString(tempDir.resolve("README"), "r");
+
+        var entries = store.entries();
+
+        assertThat(entries).hasSize(3);
+        assertThat(entries).filteredOn(e -> id.equals(e.blobId())).singleElement()
+            .satisfies(e -> assertThat(e.temp()).isFalse());
+        assertThat(entries).filteredOn(BlobEntry::temp).singleElement()
+            .satisfies(e -> assertThat(e.blobId()).isNull());
+        assertThat(entries).filteredOn(e -> e.fileName().equals("README")).singleElement()
+            .satisfies(e -> assertThat(e.blobId()).isNull());
+    }
+
+    @Test
+    void deleteEntryRemovesTheFileAndRefusesPathsOutsideTheDataDir() throws Exception {
+        DiskBlobStore store = new DiskBlobStore(tempDir.toString());
+        java.nio.file.Files.writeString(tempDir.resolve("a.tmp"), "t");
+
+        store.deleteEntry("a.tmp");
+
+        assertThat(java.nio.file.Files.exists(tempDir.resolve("a.tmp"))).isFalse();
+        assertThatThrownBy(() -> store.deleteEntry("../escape"))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
 }
