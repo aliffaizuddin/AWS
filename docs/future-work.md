@@ -41,6 +41,14 @@ of scope-creeping").
   minimum) doesn't fit the 12GB budget alongside actual workloads; see
   `architecture.md` §13 for the hardware tier that would make this viable later
 - 3-node HA clustering for any stateful component (Postgres, Elasticsearch, etc.)
+- Chaos: network-fault injection between S3 and IAM (latency/packet loss
+  pushing IAM calls past S3's read timeout) — needs `tc` in a privileged
+  container or a chaos operator (Chaos Mesh/Litmus), which costs RAM this
+  node doesn't have. Revisit with a second node or a RAM upgrade.
+- Chaos: OOM-kill and disk-full scenarios — overlap with resource-limit
+  tuning; revisit if a real OOM or full disk shows up in practice.
+- Chaos: multipart-upload crash consistency — revisit once S3 multipart
+  exists (`docs/services/s3.md`).
 
 ## Language strategy — out of scope for now
 
@@ -64,3 +72,5 @@ Reasons to actually pick one of these back up later:
 - **Before wiring in the real `aws` CLI / SDKs against this service for anything
   beyond ad-hoc testing** → enforce full AWS-style bucket-name validation
   (DNS-safe charset, 3-63 chars)
+- **S3 multipart upload lands** → extend chaos scenario 04 to kill S3
+  mid-multipart (between part uploads and during complete)
