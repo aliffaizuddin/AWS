@@ -1,5 +1,6 @@
 package dev.cloudlite.s3.iamclient;
 
+import dev.cloudlite.s3.http.QueryParams;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
@@ -32,8 +33,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         String bucket = pathVariables != null ? pathVariables.get("bucket") : null;
         String key = pathVariables != null ? pathVariables.get("key") : null;
         String method = request.getMethod();
-        boolean uploadsParam = request.getParameterMap().containsKey("uploads");
-        boolean uploadIdParam = request.getParameterMap().containsKey("uploadId");
+        boolean uploadsParam = QueryParams.has(request.getQueryString(), "uploads");
+        boolean uploadIdParam = QueryParams.has(request.getQueryString(), "uploadId");
 
         String action;
         String resource;

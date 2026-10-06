@@ -297,4 +297,24 @@ class S3ApplicationIntegrationTest {
         ResponseEntity<String> deleted = restTemplate.exchange("/abort-bucket", HttpMethod.DELETE, null, String.class);
         assertThat(deleted.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     }
+
+    // curl -d sends application/x-www-form-urlencoded; Tomcat parses such a body
+    // into request parameters if anything asks for them, leaving the controller
+    // an empty body. The complete must still work.
+    @Test
+    void completeWorksWhenTheBodyIsSentFormEncoded() {
+        restTemplate.put("/form-bucket", null);
+        String id = startUpload("form-bucket", "k");
+        String e1 = putPart("form-bucket", "k", id, 1, "only".getBytes(StandardCharsets.UTF_8));
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        String body = "<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>" + e1
+            + "</ETag></Part></CompleteMultipartUpload>";
+
+        ResponseEntity<String> done = restTemplate.postForEntity(
+            "/form-bucket/k?uploadId=" + id, new HttpEntity<>(body, headers), String.class);
+
+        assertThat(done.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(xmlValue(done.getBody(), "ETag")).endsWith("-1\"");
+    }
 }

@@ -9,6 +9,7 @@ import dev.cloudlite.s3.dto.PartXml;
 import dev.cloudlite.s3.dto.UploadXml;
 import dev.cloudlite.s3.error.S3ApiException;
 import dev.cloudlite.s3.error.S3ErrorCode;
+import dev.cloudlite.s3.http.QueryParams;
 import dev.cloudlite.s3.service.CompletionResult;
 import dev.cloudlite.s3.service.MultipartService;
 import dev.cloudlite.s3.service.ObjectService;
@@ -28,7 +29,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 // Multipart routes are distinguished from plain object routes by query
-// parameters; Spring prefers the mapping with more matching params.
+// parameters; Spring prefers the mapping with more matching params. POST is
+// the exception — see post().
 @RestController
 public class MultipartController {
 
@@ -42,11 +44,26 @@ public class MultipartController {
         this.objectService = objectService;
     }
 
-    @PostMapping(path = "/{bucket}/{*key}", params = "uploads")
-    public ResponseEntity<InitiateMultipartUploadResultXml> create(
+    // One POST route with no params condition: Spring's params matching calls
+    // getParameter(), which would consume a form-encoded complete body.
+    @PostMapping("/{bucket}/{*key}")
+    public ResponseEntity<?> post(
             @PathVariable String bucket,
             @PathVariable String key,
-            @RequestHeader(value = "Content-Type", required = false) String contentType) {
+            @RequestHeader(value = "Content-Type", required = false) String contentType,
+            HttpServletRequest request) throws IOException {
+        String query = request.getQueryString();
+        if (QueryParams.has(query, "uploads")) {
+            return create(bucket, key, contentType);
+        }
+        String uploadId = QueryParams.get(query, "uploadId");
+        if (uploadId != null) {
+            return complete(bucket, key, uploadId, request);
+        }
+        throw new S3ApiException(S3ErrorCode.METHOD_NOT_ALLOWED, "");
+    }
+
+    private ResponseEntity<InitiateMultipartUploadResultXml> create(String bucket, String key, String contentType) {
         MultipartUpload upload = multipart.create(bucket, strip(key), RequestBodies.contentTypeOrNull(contentType));
         return xml(new InitiateMultipartUploadResultXml(bucket, upload.getObjectKey(), upload.getUploadId().toString()));
     }
@@ -77,12 +94,8 @@ public class MultipartController {
         throw new S3ApiException(S3ErrorCode.INVALID_ARGUMENT, "partNumber");
     }
 
-    @PostMapping(path = "/{bucket}/{*key}", params = "uploadId")
-    public ResponseEntity<CompleteMultipartUploadResultXml> complete(
-            @PathVariable String bucket,
-            @PathVariable String key,
-            @RequestParam("uploadId") String uploadId,
-            HttpServletRequest request) throws IOException {
+    private ResponseEntity<CompleteMultipartUploadResultXml> complete(
+            String bucket, String key, String uploadId, HttpServletRequest request) throws IOException {
         UUID id = parseUploadId(uploadId);
         byte[] body = RequestBodies.readBounded(request, MAX_COMPLETE_BODY);
         String k = strip(key);
