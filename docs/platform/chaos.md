@@ -91,11 +91,15 @@ Postgres kill → IAM 12.7s, S3 18.9s.
   found. The consequence is that scenario 04 does **not** exercise the
   window between the blob's atomic rename and the metadata insert, where
   an orphaned blob is possible (S3 already logs that case).
-- **Short outages are smoothed in Grafana.** The dashboard's error-rate
-  panel uses 5-minute `rate()` windows and Prometheus scrapes every 15s;
-  a ~12s outage shows as a small bump rather than a spike. The raw
-  `http_server_requests_seconds_count{status="500"}` series does record
-  every failed request.
+- **The Grafana error-rate panel originally showed nothing at all.**
+  Micrometer creates a `status="500"` counter lazily, on the first 500.
+  A ~12s outage is over before the next 15s scrape, so Prometheus's
+  first sample of that series already holds the final count and
+  `rate()` sees no increase — the panel stayed at 0 for the whole run
+  even though `http_server_requests_seconds_count` recorded every
+  failure. Fixed by changing the panel's query to treat a series that
+  is new within the window as starting from zero (see
+  [`observability.md`](observability.md), "Lazily-created counters").
 
 ## Known limitations
 
