@@ -179,6 +179,17 @@ probe_until_recovered() {
   client_sh "$PROBE_SCRIPT" "$timeout" "$CHAOS_STABLE_RUN" "$url" "$@" | stamp_lines > "$out"
 }
 
+# blob_audit — "tmp=<n> orphans=<n>": leftover temp files, and blob files no
+# objects row points at, across S3's whole data dir.
+blob_audit() {
+  local files ids tmp orphans
+  files=$(kc exec deploy/s3 -- ls -1 /data </dev/null)
+  ids=$(kc exec statefulset/postgres -- psql -U cloudlite -d cloudlite -tAc 'select storage_id from objects' </dev/null | sort)
+  tmp=$(grep -c '\.tmp$' <<<"$files" || true)
+  orphans=$(grep -E '^[0-9a-f-]{36}$' <<<"$files" | sort | comm -23 - <(echo "$ids") | grep -c . || true)
+  echo "tmp=$tmp orphans=$orphans"
+}
+
 kill_pod() { kc delete pod -l "app=$1" --wait=false >/dev/null; }
 
 teardown() {
