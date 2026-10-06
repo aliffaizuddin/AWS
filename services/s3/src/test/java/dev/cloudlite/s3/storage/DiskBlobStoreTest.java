@@ -95,4 +95,20 @@ class DiskBlobStoreTest {
         assertThatThrownBy(() -> store.deleteEntry("../escape"))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void touchRefreshesTheModificationTimeAndIgnoresMissingBlobs() throws Exception {
+        DiskBlobStore store = new DiskBlobStore(tempDir.toString());
+        UUID id = UUID.randomUUID();
+        store.put(id, new ByteArrayInputStream("x".getBytes()));
+        java.nio.file.Path file = tempDir.resolve(id.toString());
+        java.nio.file.Files.setLastModifiedTime(file,
+            java.nio.file.attribute.FileTime.from(java.time.Instant.parse("2020-01-01T00:00:00Z")));
+
+        store.touch(id);
+        store.touch(UUID.randomUUID()); // missing: no exception
+
+        assertThat(java.nio.file.Files.getLastModifiedTime(file).toInstant())
+            .isAfter(java.time.Instant.now().minusSeconds(60));
+    }
 }

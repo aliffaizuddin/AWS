@@ -10,6 +10,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -74,6 +75,19 @@ public class DiskBlobStore implements BlobStore {
             throw new BlobNotFoundException("storage: blob not found: " + id);
         } catch (IOException e) {
             throw new UncheckedIOException("storage: remove " + id, e);
+        }
+    }
+
+    // Restarts the reconciler's grace period for a blob that just became
+    // unreferenced. A missing blob is ignored.
+    @Override
+    public void touch(UUID id) {
+        try {
+            Files.setLastModifiedTime(pathFor(id), FileTime.from(Instant.now()));
+        } catch (NoSuchFileException e) {
+            // already gone
+        } catch (IOException e) {
+            throw new UncheckedIOException("storage: touch " + id, e);
         }
     }
 

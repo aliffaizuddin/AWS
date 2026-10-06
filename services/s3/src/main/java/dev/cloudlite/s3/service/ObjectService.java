@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.util.Enumeration;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -83,7 +84,12 @@ public class ObjectService {
         if (!metadata.isMultipart()) {
             return store.get(metadata.getStorageId());
         }
-        Iterator<UploadPart> remaining = parts.findByIdUploadIdOrderByIdPartNumberAsc(metadata.getUploadId()).iterator();
+        List<UploadPart> manifest = parts.findByIdUploadIdOrderByIdPartNumberAsc(metadata.getUploadId());
+        if (manifest.isEmpty()) {
+            // Deleted or overwritten between the metadata read and here.
+            throw new S3ApiException(S3ErrorCode.NO_SUCH_KEY, metadata.getKey());
+        }
+        Iterator<UploadPart> remaining = manifest.iterator();
         // Opens each part only when the previous one is exhausted, so at most one file is open.
         return new SequenceInputStream(new Enumeration<>() {
             @Override

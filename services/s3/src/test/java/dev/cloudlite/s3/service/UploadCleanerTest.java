@@ -1,6 +1,8 @@
 package dev.cloudlite.s3.service;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,7 +39,9 @@ class UploadCleanerTest {
     }
 
     @Test
-    void discardQuietlyDeletesRowsThenBlobs() {
+    void discardQuietlyDeletesRowsButLeavesBlobsToGarbageCollection() {
+        // A GET may still be streaming these parts (they're opened lazily), so
+        // the files stay until the reconciler's grace period has passed.
         UUID uploadId = UUID.randomUUID();
         UploadPart p = new UploadPart(uploadId, 1, UUID.randomUUID(), 1, "a");
         when(parts.findByIdUploadIdOrderByIdPartNumberAsc(uploadId)).thenReturn(List.of(p));
@@ -46,7 +50,8 @@ class UploadCleanerTest {
 
         verify(parts).deleteAll(List.of(p));
         verify(uploads).deleteById(uploadId);
-        verify(store).delete(p.getStorageId());
+        verify(store).touch(p.getStorageId());
+        verify(store, never()).delete(any());
     }
 
     @Test

@@ -8,6 +8,7 @@ public interface BlobStore {
     void put(UUID id, InputStream in);
     InputStream get(UUID id);
     void delete(UUID id);
+    void touch(UUID id);
     List<BlobEntry> entries();
     void deleteEntry(String fileName);
 }

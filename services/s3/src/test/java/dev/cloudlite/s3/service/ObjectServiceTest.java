@@ -177,4 +177,15 @@ class ObjectServiceTest {
         verify(objects).deleteById(new ObjectMetadataId("photos", "big.bin"));
         verify(cleaner).discardQuietly(uploadId);
     }
+
+    @Test
+    void getBlobOfMultipartObjectWhosePartsVanishedIsNoSuchKey() {
+        UUID uploadId = UUID.randomUUID();
+        when(parts.findByIdUploadIdOrderByIdPartNumberAsc(uploadId)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.getBlob(
+                ObjectMetadata.multipart("photos", "big.bin", "text/plain", 6, "e-2", uploadId)))
+            .isInstanceOf(S3ApiException.class)
+            .extracting("errorCode").isEqualTo(S3ErrorCode.NO_SUCH_KEY);
+    }
 }

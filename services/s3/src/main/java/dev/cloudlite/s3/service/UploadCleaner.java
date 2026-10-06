@@ -33,6 +33,16 @@ public class UploadCleaner {
         this.tx = tx;
     }
 
+    private void touchBlobsQuietly(Collection<UUID> storageIds) {
+        for (UUID id : storageIds) {
+            try {
+                store.touch(id);
+            } catch (RuntimeException e) {
+                log.warn("s3: failed to touch blob {}; it may be collected before an in-flight read ends", id, e);
+            }
+        }
+    }
+
     public void deleteBlobsQuietly(Collection<UUID> storageIds) {
         for (UUID id : storageIds) {
             try {
@@ -46,7 +56,9 @@ public class UploadCleaner {
     }
 
     // Removes an upload nothing references any more (its object was
-    // overwritten or deleted): rows first, then blobs.
+    // overwritten or deleted). Only the rows go now: a GET may still be
+    // streaming these parts, opening them one by one, so the files are
+    // touched and left to the reconciler's grace period.
     public void discardQuietly(UUID uploadId) {
         try {
             List<UUID> blobs = tx.execute(status -> {
@@ -55,7 +67,7 @@ public class UploadCleaner {
                 uploads.deleteById(uploadId);
                 return ps.stream().map(UploadPart::getStorageId).toList();
             });
-            deleteBlobsQuietly(blobs == null ? List.of() : blobs);
+            touchBlobsQuietly(blobs == null ? List.of() : blobs);
         } catch (RuntimeException e) {
             log.warn("s3: failed to discard upload {}, leaving it to the reconciler", uploadId, e);
         }
