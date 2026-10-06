@@ -7,7 +7,7 @@ recovery, checks correctness, and writes a Markdown report. See
 for what was built and
 [`../superpowers/specs/2026-10-06-chaos-test-design.md`](../superpowers/specs/2026-10-06-chaos-test-design.md)
 for the design. First full run:
-[`../../chaos/reports/2026-10-06-032340-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-032340-k3d-cloudlite-test.md).
+[`../../chaos/reports/2026-10-06-033601-k3d-cloudlite-test.md`](../../chaos/reports/2026-10-06-033601-k3d-cloudlite-test.md).
 
 ## Scope
 
@@ -17,7 +17,7 @@ availability.
 
 | # | Inject | Measure | Pass if |
 |---|---|---|---|
-| 01 Kill IAM | probe S3 `GET` every 250ms, delete the IAM pod | time to first S3 error; recovery time | no 2xx between first error and stable recovery (fail-closed); recovery < 120s |
+| 01 Kill IAM | probe S3 `GET` and IAM `/healthz` every 250ms, delete the IAM pod | recovery time for S3 and IAM | fail-closed: no 2xx after S3's first error, and S3 serves stable 2xx no earlier than IAM is healthy again (500ms probe-skew tolerance); recovery < 120s |
 | 02 Kill S3 | seed 10 × 64 KiB objects, probe `GET`, delete the S3 pod | recovery time | recovery < 120s; all 10 objects read back with identical sha256 |
 | 03 Kill Postgres | same seed; probe S3 `GET` and IAM `/auth/token` concurrently, delete `postgres-0` | recovery time for S3 and IAM separately | both < 180s; objects intact; the test user's API key still mints a token that is still authorized |
 | 04 Kill S3 mid-PUT | 80 MiB `PUT` throttled with `curl --limit-rate 4M`, delete the S3 pod ~2s in | — | object afterwards is absent or byte-identical (never partial); retried `PUT` succeeds; leftover `.tmp` files / orphaned blobs reported (WARN, not FAIL) |
@@ -40,7 +40,10 @@ chaos/test/run-tests.sh       # offline unit tests, no cluster
 ```
 
 Exit codes: `0` all PASS (WARN allowed) · `1` any FAIL · `2` preflight,
-context-guard, setup, or infrastructure abort · `130` interrupted.
+context-guard, setup, or infrastructure abort · `130` Ctrl-C · `143`
+SIGTERM. On either signal the running scenario's whole process tree
+(probe loops, `kubectl exec`s) is stopped immediately, then teardown
+runs.
 
 Output: `chaos/reports/<YYYY-MM-DD-HHMMSS>-<context>.md` (commit the ones
 worth keeping) and raw probe logs under `chaos/reports/raw/<run-id>/`
@@ -72,8 +75,9 @@ ms — paste the epoch-ms range into Grafana's time picker on the
 
 ## First-run findings (2026-10-06, k3d)
 
-All four scenarios PASS. Measured recovery: IAM kill → S3 healthy in
-12.0s; S3 kill → 14.2s; Postgres kill → S3 and IAM both 10.5s.
+All four scenarios PASS. Measured recovery: IAM kill → IAM healthy in
+11.4s and S3 serving again at 12.4s (never before IAM); S3 kill → 14.2s;
+Postgres kill → IAM 12.7s, S3 18.9s.
 
 - **S3 fails closed when IAM is down, but returns `500 InternalError`
   instead of `503`.** `IamUnavailableException` has no dedicated handler
@@ -98,9 +102,12 @@ All four scenarios PASS. Measured recovery: IAM kill → S3 healthy in
 - **IAM test users/policies accumulate** — IAM has no DELETE endpoints
   for users or policies, so each run leaves a `chaos-<run-id>` pair
   behind (logged at teardown). Buckets and objects are deleted.
-- **Interrupting a run while IAM is down** (Ctrl-C during scenario 01)
-  leaves that run's bucket behind: teardown can't get a token to delete
-  it. Teardown logs a warning; the client pod is still removed.
+- **Interrupting a run while IAM or S3 is down** (Ctrl-C/SIGTERM during
+  a kill) leaves that run's bucket behind: teardown can't get a token or
+  reach S3 to delete it. Teardown logs a warning; the client pod is still
+  removed.
+- A probe that produces no samples (e.g. `kubectl exec` failed) is a
+  FAIL, never a WARN or a recovery time.
 - Assumes the host running `chaos/run.sh` and the cluster share a clock
   closely enough for millisecond timing — true for k3d.
 
