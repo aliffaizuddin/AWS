@@ -131,10 +131,26 @@ test_check_fail_closed_fails_on_flapping_or_no_outage() {
   assert_eq FAIL "$(scenario_status 02)" "fail-closed: no S3 outage at all fails"
 }
 
+test_check_fail_closed_fails_when_s3_serves_during_an_iam_timeout_phase() {
+  # IAM refused until 10s, then only timed out until it came back at 20s; an S3
+  # that fails open on IAM timeouts would be back at 11s.
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 80 yes yes 11000 0)" "$(_parsed 80 yes yes 20000 0 10000)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: 2xx during IAM's timeout phase is a fail-open"
+}
+
+test_check_fail_closed_uses_iam_recovery_when_only_timeouts_seen() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 3000 0)" "$(_parsed 40 yes yes 12000 0 -)"
+  check_fail_closed 02 "$(_parsed 40 yes yes 11000 0)" "$(_parsed 40 yes yes 12000 0 -)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: judged against IAM recovery minus probe timeout"
+  assert_eq PASS "$(scenario_status 02)" "fail-closed: within IAM's last probe window passes"
+}
+
 test_check_fail_closed_unjudgeable_or_unrun() {
   _fresh_run_dir
   check_fail_closed 01 "$(_parsed 0 no - - 0)" "$(_parsed 40 yes yes 12000 0 11000)"
-  check_fail_closed 02 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes yes 12000 0 -)"
+  check_fail_closed 02 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes no - 0 -)"
   assert_eq FAIL "$(scenario_status 01)" "fail-closed: S3 probe never ran"
-  assert_eq WARN "$(scenario_status 02)" "fail-closed: IAM never seen refusing (only timeouts) can't be judged"
+  assert_eq WARN "$(scenario_status 02)" "fail-closed: IAM neither seen refusing nor recovered can't be judged"
 }

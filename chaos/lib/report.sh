@@ -69,13 +69,24 @@ check_recovery() {
 # sample independently every 250ms.
 CHAOS_FAIL_CLOSED_SKEW_MS=${CHAOS_FAIL_CLOSED_SKEW_MS:-500}
 
+# The in-pod probe's per-request curl --max-time, in ms.
+CHAOS_PROBE_TIMEOUT_MS=${CHAOS_PROBE_TIMEOUT_MS:-2000}
+
 # check_fail_closed <scenario> <s3 parse_probe output> <iam parse_probe output>
 # S3 must not serve a 2xx while IAM is observed down. "Observed down" means a
 # fast failure from the IAM probe (see down_until_ms in parse_probe).
 check_fail_closed() {
-  local id=$1 s3=$2 iam=$3 flap s3_rec iam_down
+  local id=$1 s3=$2 iam=$3 flap s3_rec iam_down iam_rec bound=""
   flap=$(kv flap_2xx <<<"$s3")
   iam_down=$(kv down_until_ms <<<"$iam")
+  iam_rec=$(kv recovery_ms <<<"$iam")
+  # IAM was down at least until its last fast refusal, and at least until one
+  # probe timeout before its first stable 2xx (that sample may have hung).
+  [[ -n $iam_down && $iam_down != - ]] && bound=$iam_down
+  if [[ $(kv recovered <<<"$iam") == yes && -n $iam_rec && $iam_rec != - ]]; then
+    local from_recovery=$((iam_rec - CHAOS_PROBE_TIMEOUT_MS))
+    if [[ -z $bound ]] || ((from_recovery > bound)); then bound=$from_recovery; fi
+  fi
   if [[ $(kv samples <<<"$s3") == 0 ]]; then
     record_result "$id" fail-closed FAIL "the S3 probe produced no samples after the kill"
   elif [[ $(kv outage_seen <<<"$s3") == no ]]; then
@@ -84,14 +95,14 @@ check_fail_closed() {
     record_result "$id" fail-closed FAIL "$flap 2xx response(s) between the first error and stable recovery"
   elif [[ $(kv recovered <<<"$s3") != yes ]]; then
     record_result "$id" fail-closed PASS "no 2xx after the first error (S3 did not recover within the probe)"
-  elif [[ -z $iam_down || $iam_down == - ]]; then
-    record_result "$id" fail-closed WARN "IAM's outage was only seen as timeouts, so S3's recovery can't be ordered against it"
+  elif [[ -z $bound ]]; then
+    record_result "$id" fail-closed WARN "IAM was neither seen refusing nor seen recovering, so S3's recovery can't be ordered against it"
   else
     s3_rec=$(kv recovery_ms <<<"$s3")
-    if ((s3_rec + CHAOS_FAIL_CLOSED_SKEW_MS < iam_down)); then
-      record_result "$id" fail-closed FAIL "S3 served stable 2xx at $(fmt_secs "$s3_rec") while IAM was still refusing at $(fmt_secs "$iam_down") (fail-open)"
+    if ((s3_rec + CHAOS_FAIL_CLOSED_SKEW_MS < bound)); then
+      record_result "$id" fail-closed FAIL "S3 served stable 2xx at $(fmt_secs "$s3_rec") while IAM was still down until at least $(fmt_secs "$bound") (fail-open)"
     else
-      record_result "$id" fail-closed PASS "no 2xx while IAM was observed down (IAM last refused at $(fmt_secs "$iam_down"), S3 back at $(fmt_secs "$s3_rec"))"
+      record_result "$id" fail-closed PASS "no 2xx while IAM was known down (until at least $(fmt_secs "$bound")); S3 back at $(fmt_secs "$s3_rec")"
     fi
   fi
 }
