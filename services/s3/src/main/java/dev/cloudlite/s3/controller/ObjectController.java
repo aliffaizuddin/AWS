@@ -31,7 +31,7 @@ public class ObjectController {
         this.objectService = objectService;
     }
 
-    @PutMapping("/{bucket}/{*key}")
+    @PutMapping(path = "/{bucket}/{*key}", params = {"!partNumber", "!uploadId"})
     public ResponseEntity<Void> put(
             @PathVariable String bucket,
             @PathVariable String key,
