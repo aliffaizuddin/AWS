@@ -127,6 +127,32 @@ s3_get_sha256() {
     echo "$c $s"' "$S3_URL/$CHAOS_BUCKET/$1" "$2"
 }
 
+# seed_objects <prefix> <count> <bytes> <token> <out_file>
+seed_objects() {
+  local prefix=$1 count=$2 bytes=$3 token=$4 out=$5 i res
+  : > "$out"
+  for ((i = 1; i <= count; i++)); do
+    res=$(s3_put_random "$prefix-$i" "$bytes" "$token")
+    [[ ${res%% *} == 200 ]] || return 1
+    echo "$prefix-$i ${res#* }" >> "$out"
+  done
+}
+
+# check_objects <scenario> <check_name> <seed_file> <token>
+check_objects() {
+  local id=$1 name=$2 seed=$3 token=$4 key want got total=0 bad=()
+  while read -r key want; do
+    total=$((total + 1))
+    got=$(s3_get_sha256 "$key" "$token")
+    [[ $got == "200 $want" ]] || bad+=("$key(${got%% *})")
+  done < "$seed"
+  if ((${#bad[@]} == 0)); then
+    record_result "$id" "$name" PASS "$total/$total objects read back with matching sha256"
+  else
+    record_result "$id" "$name" FAIL "$((total - ${#bad[@]}))/$total intact; bad: ${bad[*]}"
+  fi
+}
+
 # In-pod probe loop. Args: timeout_s, stable_run, url, then extra curl args.
 # Prints one HTTP status per request (timestamped on the host by
 # stamp_lines); exits once a failure has been seen followed by stable_run
