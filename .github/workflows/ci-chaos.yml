@@ -1,0 +1,25 @@
+name: CI - Chaos suite
+
+on:
+  pull_request:
+    paths:
+      - "chaos/**"
+      - ".github/workflows/ci-chaos.yml"
+  push:
+    branches: [main]
+    paths:
+      - "chaos/**"
+      - ".github/workflows/ci-chaos.yml"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: find chaos -name '*.sh' -print0 | xargs -0 shellcheck -x
+
+      - name: Offline unit tests
+        run: chaos/test/run-tests.sh
