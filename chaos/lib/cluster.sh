@@ -194,10 +194,7 @@ kill_pod() { kc delete pod -l "app=$1" --wait=false >/dev/null; }
 
 teardown() {
   set +e
-  local jobs_left tok key
-  jobs_left=$(jobs -p)
-  # shellcheck disable=SC2086 # one PID per word
-  [[ -n $jobs_left ]] && kill $jobs_left 2>/dev/null
+  local tok key
   if [[ -n ${CHAOS_API_KEY:-} ]] && kc get pod "$CLIENT_POD" >/dev/null 2>&1; then
     tok=$(iam_token 2>/dev/null)
     if [[ -n $tok && $tok != null ]]; then

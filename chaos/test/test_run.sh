@@ -44,3 +44,18 @@ test_parse_args_selects_named_scenario() {
   parse_args 01
   assert_eq "01" "${SELECTED[*]}" "args: explicit id selects only that scenario"
 }
+
+test_kill_tree_kills_descendants() {
+  local root kids k alive=0
+  bash -c 'sleep 300 & sleep 300 & wait' &
+  root=$!
+  sleep 0.5
+  kids=$(pgrep -P "$root" | paste -sd' ')
+  kill_tree "$root"
+  sleep 0.5
+  for k in $root $kids; do
+    kill -0 "$k" 2>/dev/null && alive=$((alive + 1))
+  done
+  wait "$root" 2>/dev/null || true
+  assert_eq "2 0" "$(wc -w <<<"$kids" | tr -d ' ') $alive" "kill_tree: root and both children gone"
+}

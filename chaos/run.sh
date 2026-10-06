@@ -85,6 +85,31 @@ report_path() {
   echo "$CHAOS_DIR/reports/${d:0:4}-${d:4:2}-${d:6:2}-$t-${CHAOS_CONTEXT//[^A-Za-z0-9._-]/-}.md"
 }
 
+# kill_tree <pid> — SIGTERM a process and all its descendants. Background
+# jobs of a non-interactive shell ignore SIGINT, so Ctrl-C alone would
+# leave a scenario's probe loops and kubectl execs running.
+kill_tree() {
+  local pids=("$1") i=0 c
+  kill -STOP "$1" 2>/dev/null || return 0
+  while ((i < ${#pids[@]})); do
+    for c in $(pgrep -P "${pids[i]}"); do
+      pids+=("$c")
+    done
+    i=$((i + 1))
+  done
+  kill -TERM "${pids[@]}" 2>/dev/null
+  kill -CONT "$1" 2>/dev/null
+  return 0
+}
+
+SCENARIO_PID=""
+
+# on_signal <exit_code> — stop the running scenario, then exit (teardown runs on EXIT).
+on_signal() {
+  [[ -n $SCENARIO_PID ]] && kill_tree "$SCENARIO_PID"
+  exit "$1"
+}
+
 write_meta() {
   local a
   {
@@ -110,7 +135,8 @@ main() {
   log "run $RUN_ID against context $CHAOS_CONTEXT"
 
   trap teardown EXIT
-  trap 'exit 130' INT TERM
+  trap 'on_signal 130' INT
+  trap 'on_signal 143' TERM
   set -E
   trap 'log "ERROR: setup failed (line $LINENO)"; exit 2' ERR
   start_client_pod
@@ -127,14 +153,19 @@ main() {
 
   for id in "${SELECTED[@]}"; do
     log "scenario $id"
+    # Run in the background and wait, so a trapped INT/TERM interrupts the
+    # wait at once instead of after the scenario finishes.
     set +e
     (
       set -e
       # shellcheck source=/dev/null
       source "$(scenario_file "$id")"
       scenario_run
-    )
+    ) &
+    SCENARIO_PID=$!
+    wait "$SCENARIO_PID"
     rc=$?
+    SCENARIO_PID=""
     set -e
     if ((rc != 0)); then
       record_result "$id" scenario-script FAIL "scenario script exited $rc; see the run log"
