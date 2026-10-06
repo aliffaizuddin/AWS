@@ -17,7 +17,7 @@ availability.
 
 | # | Inject | Measure | Pass if |
 |---|---|---|---|
-| 01 Kill IAM | probe S3 `GET` and IAM `/healthz` every 250ms, delete the IAM pod | recovery time for S3 and IAM | fail-closed: no 2xx after S3's first error, and S3 serves stable 2xx no earlier than IAM's last *observed* refusal (500ms tolerance; WARN if IAM was only seen timing out); recovery < 120s |
+| 01 Kill IAM | probe S3 `GET` and IAM `/healthz` every 250ms, delete the IAM pod | recovery time for S3 and IAM | fail-closed: no 2xx after S3's first error, and S3 serves stable 2xx no earlier than IAM was known down — the later of IAM's last fast refusal and (IAM's first stable 2xx − the 2s probe timeout), 500ms tolerance; WARN if neither is known; recovery < 120s |
 | 02 Kill S3 | seed 10 × 64 KiB objects, probe `GET`, delete the S3 pod | recovery time | recovery < 120s; all 10 objects read back with identical sha256 |
 | 03 Kill Postgres | same seed; probe S3 `GET` and IAM `/auth/token` concurrently, delete `postgres-0` | recovery time for S3 and IAM separately | both < 180s; objects intact; the test user's API key still mints a token that is still authorized |
 | 04 Kill S3 mid-PUT | 80 MiB `PUT` throttled with `curl --limit-rate 4M`, delete the S3 pod ~2s in | — | object afterwards is absent or byte-identical (never partial); retried `PUT` succeeds; leftover `.tmp` files / orphaned blobs reported (WARN, not FAIL) |
@@ -120,9 +120,10 @@ The same run also exposed a **measurement flaw in 01's fail-closed
 check**: the IAM probe is sequential with a 2s timeout, so one request
 routed to the terminating IAM pod blinded it for ~2s, and IAM's first
 2xx lagged S3's. A timed-out sample says nothing about IAM; a fast
-refusal proves it was down. The check now orders S3's recovery against
-IAM's last observed refusal (`down_until_ms`) instead of IAM's first
-success.
+refusal proves it was down, and so does the gap before IAM's first 2xx
+minus one probe timeout. The check now orders S3's recovery against the
+later of those two (`down_until_ms`, and recovery − 2s) instead of IAM's
+first success — so a fail-open during an IAM timeout phase still FAILs.
 
 ## Known limitations
 
