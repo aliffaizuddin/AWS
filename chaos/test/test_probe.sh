@@ -98,3 +98,14 @@ LOG
   assert_eq 1250 "$(kv outage_start_ms <<<"$out")" "garbage: ignored"
   assert_eq 500 "$(kv recovery_ms <<<"$out")" "garbage: recovery unaffected"
 }
+
+test_stamp_lines_prefixes_epoch_ms() {
+  local out before after ts
+  before=$(date +%s%3N)
+  out=$(printf '200\n000\n' | stamp_lines)
+  after=$(date +%s%3N)
+  assert_eq 2 "$(wc -l <<<"$out" | tr -d ' ')" "stamp: one output line per input line"
+  assert_eq "200" "$(head -n1 <<<"$out" | cut -d' ' -f2)" "stamp: status kept"
+  ts=$(head -n1 <<<"$out" | cut -d' ' -f1)
+  assert_eq yes "$( ((ts >= before && ts <= after)) && echo yes || echo no)" "stamp: epoch ms within the call window"
+}

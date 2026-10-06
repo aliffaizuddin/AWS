@@ -53,3 +53,14 @@ parse_probe() {
 
 # kv <key> — read one value out of parse_probe output on stdin.
 kv() { sed -n "s/^$1=//p"; }
+
+# stamp_lines — prefix each stdin line with the host's epoch ms as it arrives.
+# The probe loop runs in a busybox pod whose date has no sub-second support,
+# so probe lines are timestamped here, on the same clock as the kill time.
+stamp_lines() {
+  local line t
+  while IFS= read -r line; do
+    t=${EPOCHREALTIME/./}
+    echo "${t:0:-3} $line"
+  done
+}
