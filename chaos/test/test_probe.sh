@@ -112,3 +112,40 @@ test_stamp_lines_prefixes_epoch_ms() {
   ts=$(head -n1 <<<"$out" | cut -d' ' -f1)
   assert_eq yes "$( ((ts >= before && ts <= after)) && echo yes || echo no)" "stamp: epoch ms within the call window"
 }
+
+test_parse_probe_down_until_ignores_timeouts() {
+  local f out
+  # kill at 1000; fast failures (refused) every ~250ms, then a 2s timeout, then recovery.
+  f=$(_probe_log <<'LOG'
+1000 200
+1250 000
+1500 503
+1750 000
+3750 000
+4000 200
+4250 200
+4500 200
+4750 200
+5000 200
+LOG
+)
+  out=$(parse_probe "$f" 1000)
+  assert_eq 750 "$(kv down_until_ms <<<"$out")" "down_until: last fast failure (1750), not the timed-out sample (3750)"
+}
+
+test_parse_probe_down_until_is_dash_when_only_timeouts() {
+  local f out
+  f=$(_probe_log <<'LOG'
+1000 200
+3000 000
+5000 000
+5250 200
+5500 200
+5750 200
+6000 200
+6250 200
+LOG
+)
+  out=$(parse_probe "$f" 1000)
+  assert_eq - "$(kv down_until_ms <<<"$out")" "down_until: no fast failure observed"
+}

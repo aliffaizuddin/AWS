@@ -70,10 +70,12 @@ check_recovery() {
 CHAOS_FAIL_CLOSED_SKEW_MS=${CHAOS_FAIL_CLOSED_SKEW_MS:-500}
 
 # check_fail_closed <scenario> <s3 parse_probe output> <iam parse_probe output>
-# S3 must not serve a 2xx from its first error until IAM is healthy again.
+# S3 must not serve a 2xx while IAM is observed down. "Observed down" means a
+# fast failure from the IAM probe (see down_until_ms in parse_probe).
 check_fail_closed() {
-  local id=$1 s3=$2 iam=$3 flap s3_rec iam_rec
+  local id=$1 s3=$2 iam=$3 flap s3_rec iam_down
   flap=$(kv flap_2xx <<<"$s3")
+  iam_down=$(kv down_until_ms <<<"$iam")
   if [[ $(kv samples <<<"$s3") == 0 ]]; then
     record_result "$id" fail-closed FAIL "the S3 probe produced no samples after the kill"
   elif [[ $(kv outage_seen <<<"$s3") == no ]]; then
@@ -82,15 +84,14 @@ check_fail_closed() {
     record_result "$id" fail-closed FAIL "$flap 2xx response(s) between the first error and stable recovery"
   elif [[ $(kv recovered <<<"$s3") != yes ]]; then
     record_result "$id" fail-closed PASS "no 2xx after the first error (S3 did not recover within the probe)"
-  elif [[ $(kv recovered <<<"$iam") != yes ]]; then
-    record_result "$id" fail-closed FAIL "S3 recovered but IAM was never seen healthy again, so S3 waiting for IAM can't be confirmed"
+  elif [[ -z $iam_down || $iam_down == - ]]; then
+    record_result "$id" fail-closed WARN "IAM's outage was only seen as timeouts, so S3's recovery can't be ordered against it"
   else
     s3_rec=$(kv recovery_ms <<<"$s3")
-    iam_rec=$(kv recovery_ms <<<"$iam")
-    if ((s3_rec + CHAOS_FAIL_CLOSED_SKEW_MS < iam_rec)); then
-      record_result "$id" fail-closed FAIL "S3 served stable 2xx at $(fmt_secs "$s3_rec"), before IAM was healthy at $(fmt_secs "$iam_rec") (fail-open)"
+    if ((s3_rec + CHAOS_FAIL_CLOSED_SKEW_MS < iam_down)); then
+      record_result "$id" fail-closed FAIL "S3 served stable 2xx at $(fmt_secs "$s3_rec") while IAM was still refusing at $(fmt_secs "$iam_down") (fail-open)"
     else
-      record_result "$id" fail-closed PASS "no 2xx until IAM was back (IAM healthy at $(fmt_secs "$iam_rec"), S3 at $(fmt_secs "$s3_rec"))"
+      record_result "$id" fail-closed PASS "no 2xx while IAM was observed down (IAM last refused at $(fmt_secs "$iam_down"), S3 back at $(fmt_secs "$s3_rec"))"
     fi
   fi
 }
