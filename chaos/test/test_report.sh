@@ -43,10 +43,10 @@ test_overall_exit_code() {
 
 test_check_recovery() {
   _fresh_run_dir
-  check_recovery 01 $'outage_seen=yes\nrecovered=yes\nrecovery_ms=41300' 120 s3
-  check_recovery 02 $'outage_seen=yes\nrecovered=yes\nrecovery_ms=130000' 120 s3
-  check_recovery 03 $'outage_seen=yes\nrecovered=no\nrecovery_ms=-' 120 iam
-  check_recovery 04 $'outage_seen=no\nrecovered=yes\nrecovery_ms=0' 120 s3
+  check_recovery 01 $'samples=20\noutage_seen=yes\nrecovered=yes\nrecovery_ms=41300' 120 s3
+  check_recovery 02 $'samples=20\noutage_seen=yes\nrecovered=yes\nrecovery_ms=130000' 120 s3
+  check_recovery 03 $'samples=20\noutage_seen=yes\nrecovered=no\nrecovery_ms=-' 120 iam
+  check_recovery 04 $'samples=20\noutage_seen=no\nrecovered=-\nrecovery_ms=-' 120 s3
   assert_eq PASS "$(scenario_status 01)" "recovery: within limit passes"
   assert_eq 41300 "$(metric 01 recovery_ms_s3)" "recovery: metric recorded"
   assert_eq FAIL "$(scenario_status 02)" "recovery: over limit fails"
@@ -84,4 +84,48 @@ test_render_report_escapes_pipes_and_newlines() {
   out=$(render_report "$meta" 01)
   assert_contains "$out" '| weird | FAIL | a \| b second line |' "report: pipe escaped, newline flattened"
   assert_contains "$out" "**Run aborted**" "report: aborted banner"
+}
+
+test_check_recovery_fails_when_probe_never_ran() {
+  _fresh_run_dir
+  check_recovery 05 $'samples=0\noutage_seen=no\nrecovered=-\nrecovery_ms=-' 120 s3
+  assert_eq FAIL "$(scenario_status 05)" "recovery: a probe with no samples is a FAIL, not a WARN"
+}
+
+_parsed() {  # _parsed <samples> <outage_seen> <recovered> <recovery_ms> <flap>
+  printf 'samples=%s\noutage_seen=%s\nrecovered=%s\nrecovery_ms=%s\nflap_2xx=%s\noutage_statuses=500\n' "$@"
+}
+
+test_check_fail_closed_passes_when_s3_recovers_after_iam() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes yes 12000 0)"
+  assert_eq PASS "$(scenario_status 01)" "fail-closed: S3 back after IAM passes"
+}
+
+test_check_fail_closed_fails_when_s3_recovers_before_iam() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 3000 0)" "$(_parsed 40 yes yes 12000 0)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: stable 2xx while IAM still down is a fail-open"
+}
+
+test_check_fail_closed_tolerates_probe_skew() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 11700 0)" "$(_parsed 40 yes yes 12000 0)"
+  assert_eq PASS "$(scenario_status 01)" "fail-closed: under 500ms of probe skew is tolerated"
+}
+
+test_check_fail_closed_fails_on_flapping_or_no_outage() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 40 yes yes 13000 2)" "$(_parsed 40 yes yes 12000 0)"
+  check_fail_closed 02 "$(_parsed 40 no - - 0)" "$(_parsed 40 yes yes 12000 0)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: 2xx mid-outage fails"
+  assert_eq FAIL "$(scenario_status 02)" "fail-closed: no S3 outage at all fails"
+}
+
+test_check_fail_closed_fails_when_unprovable() {
+  _fresh_run_dir
+  check_fail_closed 01 "$(_parsed 0 no - - 0)" "$(_parsed 40 yes yes 12000 0)"
+  check_fail_closed 02 "$(_parsed 40 yes yes 13000 0)" "$(_parsed 40 yes no - 0)"
+  assert_eq FAIL "$(scenario_status 01)" "fail-closed: S3 probe never ran"
+  assert_eq FAIL "$(scenario_status 02)" "fail-closed: IAM never seen healthy again, can't prove S3 waited"
 }

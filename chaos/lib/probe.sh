@@ -9,9 +9,10 @@ CHAOS_STABLE_RUN=${CHAOS_STABLE_RUN:-5}
 
 # parse_probe <raw_file> <kill_ms>
 # Prints key=value lines:
+#   samples          valid probe lines at or after kill_ms (0 = the probe never ran)
 #   outage_seen      yes|no — any non-2xx at or after kill_ms
 #   outage_start_ms  first non-2xx at or after kill_ms, or -
-#   recovered        yes|no — a run of CHAOS_STABLE_RUN 2xx after the outage began
+#   recovered        yes|no — a run of CHAOS_STABLE_RUN 2xx after the outage began; - if no outage
 #   recovery_ms      kill_ms to the first request of that run, or -
 #   flap_2xx         2xx after the outage began that were not part of the stable run
 #   outage_statuses  distinct non-2xx statuses after kill_ms, first-seen order, or -
@@ -22,7 +23,7 @@ parse_probe() {
     function note(s) { if (!(s in seen)) { seen[s] = 1; order = order (order == "" ? "" : ",") s } }
     NF != 2 || $1 !~ /^[0-9]+$/ || $1 + 0 < kill + 0 { next }
     {
-      ts = $1; st = $2
+      ts = $1; st = $2; samples++
       if (!outage) {
         if (!is2xx(st)) { outage = 1; outage_start = ts; note(st) }
         next
@@ -37,9 +38,10 @@ parse_probe() {
       }
     }
     END {
+      print "samples=" (samples + 0)
       if (!outage) {
-        print "outage_seen=no"; print "outage_start_ms=-"; print "recovered=yes"
-        print "recovery_ms=0"; print "flap_2xx=0"; print "outage_statuses=-"
+        print "outage_seen=no"; print "outage_start_ms=-"; print "recovered=-"
+        print "recovery_ms=-"; print "flap_2xx=0"; print "outage_statuses=-"
         exit
       }
       print "outage_seen=yes"

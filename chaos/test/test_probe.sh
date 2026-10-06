@@ -71,7 +71,9 @@ LOG
 )
   out=$(parse_probe "$f" 1000)
   assert_eq no "$(kv outage_seen <<<"$out")" "no-outage: errors before the kill are ignored"
-  assert_eq 0 "$(kv recovery_ms <<<"$out")" "no-outage: recovery 0"
+  assert_eq - "$(kv recovery_ms <<<"$out")" "no-outage: no recovery time, never a clean 0"
+  assert_eq - "$(kv recovered <<<"$out")" "no-outage: recovered is undefined"
+  assert_eq 2 "$(kv samples <<<"$out")" "no-outage: samples counts valid lines after the kill"
 }
 
 test_parse_probe_empty_log() {
@@ -79,6 +81,7 @@ test_parse_probe_empty_log() {
   f=$(mktemp)
   out=$(parse_probe "$f" 1000)
   assert_eq no "$(kv outage_seen <<<"$out")" "empty: no outage seen"
+  assert_eq 0 "$(kv samples <<<"$out")" "empty: zero samples"
 }
 
 test_parse_probe_ignores_garbage_lines() {
