@@ -32,6 +32,8 @@ public class AuthInterceptor implements HandlerInterceptor {
         String bucket = pathVariables != null ? pathVariables.get("bucket") : null;
         String key = pathVariables != null ? pathVariables.get("key") : null;
         String method = request.getMethod();
+        boolean uploadsParam = request.getParameter("uploads") != null;
+        boolean uploadIdParam = request.getParameter("uploadId") != null;
 
         String action;
         String resource;
@@ -47,6 +49,12 @@ public class AuthInterceptor implements HandlerInterceptor {
                 case "PUT" -> "s3:CreateBucket";
                 case "HEAD" -> "s3:ListBucket";
                 case "DELETE" -> "s3:DeleteBucket";
+                case "GET" -> {
+                    if (uploadsParam) {
+                        yield "s3:ListBucketMultipartUploads";
+                    }
+                    throw new IamAccessDeniedException();
+                }
                 default -> throw new IamAccessDeniedException();
             };
         } else {
@@ -54,9 +62,15 @@ public class AuthInterceptor implements HandlerInterceptor {
             resource = "arn:cloudlite:s3:::" + bucket + "/" + strippedKey;
             action = switch (method) {
                 case "PUT" -> "s3:PutObject";
-                case "GET" -> "s3:GetObject";
+                case "GET" -> uploadIdParam ? "s3:ListMultipartUploadParts" : "s3:GetObject";
                 case "HEAD" -> "s3:GetObject";
-                case "DELETE" -> "s3:DeleteObject";
+                case "DELETE" -> uploadIdParam ? "s3:AbortMultipartUpload" : "s3:DeleteObject";
+                case "POST" -> {
+                    if (uploadsParam || uploadIdParam) {
+                        yield "s3:PutObject";
+                    }
+                    throw new IamAccessDeniedException();
+                }
                 default -> throw new IamAccessDeniedException();
             };
         }

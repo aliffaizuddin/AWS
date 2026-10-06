@@ -12,16 +12,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.xpath;
 
 import dev.cloudlite.s3.controller.BucketController;
 import dev.cloudlite.s3.controller.HealthController;
+import dev.cloudlite.s3.controller.MultipartController;
 import dev.cloudlite.s3.controller.ObjectController;
+import dev.cloudlite.s3.domain.MultipartUpload;
 import dev.cloudlite.s3.domain.ObjectMetadata;
 import dev.cloudlite.s3.error.GlobalExceptionHandler;
 import dev.cloudlite.s3.service.BucketService;
+import dev.cloudlite.s3.service.MultipartService;
 import dev.cloudlite.s3.service.ObjectService;
 import java.io.ByteArrayInputStream;
 import java.sql.Connection;
@@ -36,7 +40,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-@WebMvcTest(controllers = {BucketController.class, ObjectController.class, HealthController.class})
+@WebMvcTest(controllers = {BucketController.class, ObjectController.class, HealthController.class, MultipartController.class})
 @Import(GlobalExceptionHandler.class)
 class AuthInterceptorTest {
 
@@ -51,6 +55,9 @@ class AuthInterceptorTest {
 
     @MockBean
     private ObjectService objectService;
+
+    @MockBean
+    private MultipartService multipartService;
 
     @MockBean
     private DataSource dataSource;
@@ -180,5 +187,66 @@ class AuthInterceptorTest {
             .andExpect(status().isOk());
 
         verify(iamClient, never()).authorize(any(), any(), any());
+    }
+
+    private static final String UPLOAD_ID = "11111111-1111-1111-1111-111111111111";
+
+    @Test
+    void createMultipartUploadIsPutObject() throws Exception {
+        given(multipartService.create(any(), any(), any()))
+            .willReturn(new MultipartUpload(UUID.fromString(UPLOAD_ID), "photos", "big.bin", "text/plain"));
+
+        mockMvc.perform(post("/photos/big.bin?uploads").header("Authorization", "Bearer good-token"))
+            .andExpect(status().isOk());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:PutObject", "arn:cloudlite:s3:::photos/big.bin");
+    }
+
+    @Test
+    void uploadPartIsPutObject() throws Exception {
+        given(objectService.maxObjectSize()).willReturn(1024L);
+
+        mockMvc.perform(put("/photos/big.bin?partNumber=1&uploadId=" + UPLOAD_ID)
+                .header("Authorization", "Bearer good-token").content("x".getBytes()))
+            .andExpect(status().isOk());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:PutObject", "arn:cloudlite:s3:::photos/big.bin");
+    }
+
+    @Test
+    void completeIsPutObject() throws Exception {
+        given(multipartService.complete(any(), any(), any(), any()))
+            .willReturn(new dev.cloudlite.s3.service.CompletionResult("photos", "big.bin", "e-1"));
+
+        mockMvc.perform(post("/photos/big.bin?uploadId=" + UPLOAD_ID)
+                .header("Authorization", "Bearer good-token")
+                .content("<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>a</ETag></Part></CompleteMultipartUpload>"))
+            .andExpect(status().isOk());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:PutObject", "arn:cloudlite:s3:::photos/big.bin");
+    }
+
+    @Test
+    void abortIsAbortMultipartUpload() throws Exception {
+        mockMvc.perform(delete("/photos/big.bin?uploadId=" + UPLOAD_ID).header("Authorization", "Bearer good-token"))
+            .andExpect(status().isNoContent());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:AbortMultipartUpload", "arn:cloudlite:s3:::photos/big.bin");
+    }
+
+    @Test
+    void listPartsIsListMultipartUploadParts() throws Exception {
+        mockMvc.perform(get("/photos/big.bin?uploadId=" + UPLOAD_ID).header("Authorization", "Bearer good-token"))
+            .andExpect(status().isOk());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:ListMultipartUploadParts", "arn:cloudlite:s3:::photos/big.bin");
+    }
+
+    @Test
+    void listUploadsIsListBucketMultipartUploadsOnTheBucket() throws Exception {
+        mockMvc.perform(get("/photos?uploads").header("Authorization", "Bearer good-token"))
+            .andExpect(status().isOk());
+
+        verify(iamClient).authorize("Bearer good-token", "s3:ListBucketMultipartUploads", "arn:cloudlite:s3:::photos");
     }
 }
