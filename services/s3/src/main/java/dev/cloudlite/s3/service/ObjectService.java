@@ -7,11 +7,9 @@ import dev.cloudlite.s3.error.S3ErrorCode;
 import dev.cloudlite.s3.repository.BucketRepository;
 import dev.cloudlite.s3.repository.ObjectRepository;
 import dev.cloudlite.s3.storage.BlobStore;
+import dev.cloudlite.s3.util.Md5;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -45,7 +43,7 @@ public class ObjectService {
 
         Optional<ObjectMetadata> existing = objects.findById(new ObjectMetadataId(bucket, key));
 
-        String etag = md5Hex(body);
+        String etag = Md5.hex(body);
         UUID storageId = UUID.randomUUID();
         store.put(storageId, new ByteArrayInputStream(body));
 
@@ -97,15 +95,6 @@ public class ObjectService {
         } catch (RuntimeException e) {
             log.warn("s3: delete object {}/{}: blob {} delete failed after metadata delete, blob is orphaned",
                 bucket, key, existing.get().getStorageId(), e);
-        }
-    }
-
-    private static String md5Hex(byte[] data) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("MD5");
-            return HexFormat.of().formatHex(digest.digest(data));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("MD5 not available", e);
         }
     }
 }

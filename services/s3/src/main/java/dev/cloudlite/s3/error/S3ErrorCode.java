@@ -13,6 +13,11 @@ public enum S3ErrorCode {
     ENTITY_TOO_LARGE("EntityTooLarge", HttpStatus.BAD_REQUEST, "Your proposed upload exceeds the maximum allowed size"),
     INVALID_ARGUMENT("InvalidArgument", HttpStatus.BAD_REQUEST, "Invalid Argument"),
     ACCESS_DENIED("AccessDenied", HttpStatus.FORBIDDEN, "Access Denied"),
+    NO_SUCH_UPLOAD("NoSuchUpload", HttpStatus.NOT_FOUND, "The specified multipart upload does not exist"),
+    INVALID_PART("InvalidPart", HttpStatus.BAD_REQUEST, "One or more of the specified parts could not be found or its entity tag did not match"),
+    INVALID_PART_ORDER("InvalidPartOrder", HttpStatus.BAD_REQUEST, "The list of parts was not in ascending order"),
+    ENTITY_TOO_SMALL("EntityTooSmall", HttpStatus.BAD_REQUEST, "Your proposed upload is smaller than the minimum allowed object size"),
+    MALFORMED_XML("MalformedXML", HttpStatus.BAD_REQUEST, "The XML you provided was not well-formed or did not validate"),
     INTERNAL_ERROR("InternalError", HttpStatus.INTERNAL_SERVER_ERROR, "We encountered an internal error. Please try again."),
     SERVICE_UNAVAILABLE("ServiceUnavailable", HttpStatus.SERVICE_UNAVAILABLE, "The service is temporarily unavailable. Please try again.");
 

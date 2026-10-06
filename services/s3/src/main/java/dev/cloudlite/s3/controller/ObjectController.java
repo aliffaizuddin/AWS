@@ -1,19 +1,14 @@
 package dev.cloudlite.s3.controller;
 
 import dev.cloudlite.s3.domain.ObjectMetadata;
-import dev.cloudlite.s3.error.S3ApiException;
-import dev.cloudlite.s3.error.S3ErrorCode;
 import dev.cloudlite.s3.service.ObjectService;
 import jakarta.servlet.http.HttpServletRequest;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.InvalidMediaTypeException;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -42,11 +37,8 @@ public class ObjectController {
             @PathVariable String key,
             @RequestHeader(value = "Content-Type", required = false) String contentType,
             HttpServletRequest request) throws IOException {
-        if (request.getContentLengthLong() > objectService.maxObjectSize()) {
-            throw new S3ApiException(S3ErrorCode.ENTITY_TOO_LARGE, "");
-        }
-        byte[] body = readBoundedBody(request.getInputStream(), objectService.maxObjectSize());
-        String resolvedContentType = validateContentType(contentType);
+        byte[] body = RequestBodies.readBounded(request, objectService.maxObjectSize());
+        String resolvedContentType = RequestBodies.contentTypeOrNull(contentType);
         String etag = objectService.put(bucket, stripLeadingSlash(key), body, resolvedContentType);
         return ResponseEntity.ok().header(HttpHeaders.ETAG, "\"" + etag + "\"").build();
     }
@@ -82,32 +74,5 @@ public class ObjectController {
 
     private static String stripLeadingSlash(String key) {
         return key.startsWith("/") ? key.substring(1) : key;
-    }
-
-    private static String validateContentType(String contentType) {
-        if (contentType == null || contentType.isBlank()) {
-            return null; // ObjectService already defaults null/blank to application/octet-stream
-        }
-        try {
-            MediaType.parseMediaType(contentType);
-            return contentType;
-        } catch (InvalidMediaTypeException e) {
-            return "application/octet-stream";
-        }
-    }
-
-    private static byte[] readBoundedBody(InputStream in, long maxBytes) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        byte[] chunk = new byte[8192];
-        long total = 0;
-        int read;
-        while ((read = in.read(chunk)) != -1) {
-            total += read;
-            if (total > maxBytes) {
-                throw new S3ApiException(S3ErrorCode.ENTITY_TOO_LARGE, "");
-            }
-            buffer.write(chunk, 0, read);
-        }
-        return buffer.toByteArray();
     }
 }
